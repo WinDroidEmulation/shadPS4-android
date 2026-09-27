@@ -1,0 +1,125 @@
+name: build
+
+on: [push]
+
+env:
+  BUILD_TYPE: RelWithDebInfo
+  CFLAGS: -DALLOW_TIMER_SLACK
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, macos-13]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: Create Build Environment
+      run: cmake -E make_directory ${{github.workspace}}/build
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{github.workspace}}/build
+      run: |
+        cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+        sed -e 's/-DNDEBUG//g' < CMakeCache.txt > CMakeCache.txt.new
+        mv -- CMakeCache.txt.new CMakeCache.txt
+        cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: cmake --build . --config $BUILD_TYPE
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      run: ctest -C $BUILD_TYPE --output-on-failure
+
+  testfreebsd:
+    strategy:
+      matrix:
+        release: [13.3]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Test in FreeBSD
+      id: test
+      uses: vmactions/freebsd-vm@v1
+      with:
+        release: ${{ matrix.release }}
+        envs: 'BUILD_TYPE'
+        usesh: true
+        prepare: pkg install -y cmake
+        run: |
+          mkdir build || exit 1
+          cd build || exit 1
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+          sed -e 's/-DNDEBUG//g' < CMakeCache.txt > CMakeCache.txt.new || exit 1
+          mv -- CMakeCache.txt.new CMakeCache.txt || exit 1
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+          cmake --build . --config $BUILD_TYPE || exit 1
+          ctest -C $BUILD_TYPE --output-on-failure || exit 1
+
+  testopenbsd:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Test in OpenBSD
+      id: test
+      uses: vmactions/openbsd-vm@v1
+      with:
+        release: 7.5
+        envs: 'BUILD_TYPE'
+        usesh: true
+        prepare: pkg_add cmake
+        run: |
+          mkdir build || exit 1
+          cd build || exit 1
+          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+          sed -e 's/-DNDEBUG//g' < CMakeCache.txt > CMakeCache.txt.new || exit 1
+          mv -- CMakeCache.txt.new CMakeCache.txt || exit 1
+          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+          cmake --build . --config $BUILD_TYPE || exit 1
+          ctest -C $BUILD_TYPE --output-on-failure || exit 1
+
+  testnetbsd:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Test in NetBSD
+      id: test
+      uses: vmactions/netbsd-vm@v1
+      with:
+        release: 9.4
+        envs: 'BUILD_TYPE'
+        usesh: true
+        prepare: /usr/sbin/pkg_add cmake
+        run: |
+          mkdir build || exit 1
+          cd build || exit 1
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+          sed -e 's/-DNDEBUG//g' < CMakeCache.txt > CMakeCache.txt.new || exit 1
+          mv -- CMakeCache.txt.new CMakeCache.txt || exit 1
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+          cmake --build . --config $BUILD_TYPE || exit 1
+          ctest -C $BUILD_TYPE --output-on-failure || exit 1
+
+  testdragonflybsd:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Test in DragonFly BSD
+      id: test
+      uses: vmactions/dragonflybsd-vm@v1
+      with:
+        release: 6.4.0
+        envs: 'BUILD_TYPE'
+        usesh: true
+        prepare: pkg install -y cmake
+        run: |
+          mkdir build || exit 1
+          cd build || exit 1
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+          sed -e 's/-DNDEBUG//g' < CMakeCache.txt > CMakeCache.txt.new || exit 1
+          mv -- CMakeCache.txt.new CMakeCache.txt || exit 1
+          cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+          cmake --build . --config $BUILD_TYPE || exit 1
+          ctest -C $BUILD_TYPE --output-on-failure || exit 1

@@ -1,0 +1,104 @@
+# SPDX-FileCopyrightText: Copyright 2026 shadPS4 Android port contributors
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# Android APK build. Manually triggered ONLY - there is deliberately no
+# push/pull_request/schedule trigger to avoid burning runner minutes.
+
+name: Android Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "CMake/Gradle build type"
+        type: choice
+        default: Release
+        options:
+          - Release
+          - Debug
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FFMPEG_VERSION: "7.1.1"
+  NDK_VERSION: "27.0.12077973"
+
+jobs:
+  android:
+    name: Android ${{ inputs.build_type || 'Release' }} (arm64-v8a)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout (inlined sources, no submodules needed)
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Set up Android SDK pieces
+        shell: bash
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0" > /dev/null || true
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Cache FFmpeg install prefix
+        uses: actions/cache@v4
+        with:
+          path: android/build/ffmpeg-install
+          key: ffmpeg-${{ env.FFMPEG_VERSION }}-arm64-v8a-v1
+
+      - name: Cache host protoc
+        uses: actions/cache@v4
+        with:
+          path: android/build/host-protoc
+          key: host-protoc-v1
+
+      - name: Build native libraries (protoc + FFmpeg + emulator)
+        shell: bash
+        run: |
+          bash android/build_native.sh "${{ inputs.build_type || 'Release' }}"
+
+      - name: Build APK
+        shell: bash
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon "assemble${{ inputs.build_type || 'Release' }}"
+
+      - name: Collect APK and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          TYPE="${{ inputs.build_type || 'Release' }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          # Signed builds produce app-release.apk, unsigned ones
+          # app-release-unsigned.apk - accept both.
+          SRC="$(ls android/app/build/outputs/apk/${TYPE,,}/app-${TYPE,,}*.apk | head -n 1)"
+          [[ -n "${SRC}" ]] || { echo "No APK found"; exit 1; }
+          DST="shadPS4-android-${TYPE,,}-${SHORT_SHA}.apk"
+          cp "${SRC}" "${DST}"
+          sha256sum "${DST}" > "${DST}.sha256"
+          echo "APK_NAME=${DST}" >> "${GITHUB_ENV}"
+          ls -lh "${DST}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: |
+            shadPS4-android-*.apk
+            shadPS4-android-*.apk.sha256
+          if-no-files-found: error
+          retention-days: 30

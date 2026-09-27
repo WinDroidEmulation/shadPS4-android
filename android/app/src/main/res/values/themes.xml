@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-FileCopyrightText: Copyright 2026 shadPS4 Android port contributors
+  SPDX-License-Identifier: GPL-2.0-or-later
+-->
+<resources>
+    <!-- Base application theme: fullscreen, no AndroidX dependency. -->
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

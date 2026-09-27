@@ -1,0 +1,87 @@
+# Auto generated files
+include/spdlog/spdlog_config.h
+[Dd]ebug/
+[Rr]elease/
+build/*
+*.slo
+*.lo
+*.o
+*.obj
+*.suo
+*.tlog
+*.ilk
+*.log
+*.pdb
+*.idb
+*.iobj
+*.ipdb
+*.opensdf
+*.sdf
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Codelite
+.codelite
+
+# KDevelop
+*.kdev4
+
+# .orig files
+*.orig
+
+
+# generated files
+generated
+version.rc
+
+# Cmake
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Makefile
+cmake_install.cmake
+install_manifest.txt
+/tests/tests.VC.VC.opendb
+/tests/tests.VC.db
+/tests/tests
+/tests/logs/*
+spdlogConfig.cmake
+spdlogConfigVersion.cmake
+compile_commands.json
+
+# idea
+.idea/
+.cache/
+.vscode/
+cmake-build-*/
+*.db
+*.ipch
+*.filters
+*.db-wal
+*.opendb
+*.db-shm
+*.vcxproj
+*.tcl
+*.user
+*.sln
+
+# macos
+*.DS_store
+*.xcodeproj/
+/.vs
+/out/build
+/CMakeSettings.json

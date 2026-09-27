@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-FileCopyrightText: Copyright 2026 shadPS4 Android port contributors
+  SPDX-License-Identifier: GPL-2.0-or-later
+-->
+<resources>
+    <string name="app_name">shadPS4</string>
+
+    <string name="all_files_title">Access game library</string>
+    <string name="all_files_message">To list games stored on shared storage (for example in a Games folder on the internal storage), allow shadPS4 to access all files.\n\nGames kept inside the app folder work without this permission.</string>
+    <string name="all_files_open">Allow</string>
+    <string name="all_files_later">Later</string>
+    <string name="all_files_manual">Open Settings, then Apps, shadPS4, and enable \"All files access\".</string>
+</resources>
