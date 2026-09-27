@@ -45,6 +45,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
+          # externals/sdl3 ships its own android-project Gradle wrapper JAR that
+          # is not an official Gradle distribution wrapper, so automatic wrapper
+          # validation (enabled by default) fails on it. Disable it here; the
+          # android/gradle wrapper used for the real build is tracked and known-good.
+          validate-wrappers: false
 
       - name: Set up Android SDK pieces
         shell: bash
