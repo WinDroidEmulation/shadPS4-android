@@ -194,9 +194,17 @@ build_ffmpeg() {
     log "Cross-compiling FFmpeg ${FFMPEG_VERSION} for ${SHADPS4_ABI}..."
 
     local host_prebuilt="${SHADPS4_ANDROID_NDK}/toolchains/llvm/prebuilt/${ANDROID_HOST_TAG}"
-    local cc="${host_prebuilt}/bin/clang"
-    local cxx="${host_prebuilt}/bin/clang++"
-    local target="aarch64-linux-android29"
+    # Use the NDK's API-level wrapper compilers (aarch64-linux-android29-clang).
+    # Bare `clang` carries no --target and defaults to the host (x86_64) triple,
+    # so every configure probe fails: `-march=armv8-a` is not a valid x86 CPU
+    # and the Android sysroot has no crt objects for the host triple. The
+    # wrapper embeds the right --target and --sysroot for us.
+    local api="${SHADPS4_PLATFORM#android-}"
+    local target="aarch64-linux-android${api}"
+    local cc="${host_prebuilt}/bin/${target}-clang"
+    local cxx="${host_prebuilt}/bin/${target}-clang++"
+    [[ -x "${cc}" && -x "${cxx}" ]] \
+        || die "NDK API-level wrapper compiler not found: ${cc}"
 
     # Trim the vcpkg-style feature set used by the desktop builds down to a
     # hermetic, fully-internal configuration: every bundled decoder stays on
@@ -215,7 +223,6 @@ build_ffmpeg() {
         --strip="${host_prebuilt}/bin/llvm-strip"
         --sysroot="${host_prebuilt}/sysroot"
         --extra-cflags="-O2 -fPIC"
-        --extra-ldflags="-static-libstdc++"
         --enable-static
         --disable-shared
         --enable-pic
