@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <map>
@@ -472,6 +474,44 @@ void EmulatorSettingsImpl::SetDefaultValues() {
 bool EmulatorSettingsImpl::TransferSettings() {
     toml::value og_data;
     json new_data = json::object();
+
+    // Android port: Shadps4Activity exports SHADPS4_DEFAULT_LANG based on the
+    // system locale. If the config file does not exist yet (first launch),
+    // use that language as the default instead of falling back to English.
+    // Users can still override via Settings -> Console Language; once the
+    // config.toml is written, this branch is no longer hit.
+    const bool first_launch = !std::filesystem::exists(
+        Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.toml");
+    if (first_launch) {
+        if (const char* env_lang = getenv("SHADPS4_DEFAULT_LANG");
+            env_lang != nullptr && env_lang[0] != '\0') {
+            try {
+                int lang = std::stoi(env_lang);
+                if (lang >= 0 && lang <= 30) {
+                    m_general.console_language = lang;
+                }
+            } catch (...) {
+                // Ignore a malformed env var.
+            }
+        }
+        // Also seed a couple of default game folders so the Big Picture
+        // library shows something on Android without the user having to
+        // manually add folders. These only get persisted on the first
+        // Save() call.
+        if (m_general.install_dirs.value.empty()) {
+            for (const char* candidate : {
+                     "/storage/emulated/0/Games/shadPS4",
+                     "/storage/emulated/0/Download/shadPS4",
+                     "/storage/emulated/0/Pictures/shadPS4",
+                 }) {
+                std::error_code ec;
+                if (std::filesystem::is_directory(candidate, ec)) {
+                    m_general.install_dirs.value.push_back({candidate, true});
+                }
+            }
+        }
+    }
+
     try {
         auto path = Common::FS::GetUserPath(Common::FS::PathType::UserDir) / "config.toml";
         std::ifstream ifs;

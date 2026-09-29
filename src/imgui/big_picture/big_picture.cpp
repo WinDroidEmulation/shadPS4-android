@@ -19,6 +19,7 @@
 #include "imgui/big_picture/imgui_impl_sdlrenderer3.h"
 #include "imgui/big_picture/settings_dialog_imgui.h"
 #include "imgui/imgui_std.h"
+#include "imgui/imgui_translations.h"
 #include "imgui/renderer/font_stack.h"
 #include "sdl_window.h"
 
@@ -36,6 +37,7 @@ float uiScale = 1.0f;
 SDL_Renderer* renderer;
 
 namespace {
+using ImguiTranslate::tr;
 
 std::filesystem::path UpdateChecker(const std::string sceItem, std::filesystem::path game_folder) {
     std::filesystem::path updatedPath = "";
@@ -338,7 +340,7 @@ void Launch(char* executableName, bool sameProcess) {
         ImGui::BeginChild("ContentRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()),
                           child_flags, child_window_flags);
 
-        Overlay::TextCentered("Select Game");
+        Overlay::TextCentered(tr("Select Game"));
         ImGui::Dummy(ImVec2(0.0f, 10.f * uiScale));
 
         if (ImGui::IsWindowAppearing()) {
@@ -364,12 +366,15 @@ void Launch(char* executableName, bool sameProcess) {
         ImGui::SameLine();
 
         // Align buttons right
-        float buttonsWidth = ImGui::CalcTextSize("Settings").x + ImGui::CalcTextSize("Exit").x +
+        const auto settings_label = tr("Settings");
+        const auto exit_label = tr("Exit");
+        float buttonsWidth = ImGui::CalcTextSize(settings_label.c_str()).x +
+                             ImGui::CalcTextSize(exit_label.c_str()).x +
                              ImGui::GetStyle().FramePadding.x * 4.0f +
                              ImGui::GetStyle().ItemSpacing.x;
         ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - buttonsWidth);
 
-        if (ImGui::Button("Settings")) {
+        if (ImGui::Button(settings_label.c_str())) {
             EmulatorSettings.SetBigPictureScale(static_cast<int>(uiScale * 1000));
             EmulatorSettings.Save();
             settingsWindow.Prepare();
@@ -378,23 +383,24 @@ void Launch(char* executableName, bool sameProcess) {
 
         ImGui::SameLine();
 
-        if (ImGui::Button("Exit")) {
-            ImGui::OpenPopup("Confirm Exit");
+        if (ImGui::Button(exit_label.c_str())) {
+            ImGui::OpenPopup(tr("Confirm Exit").c_str());
         }
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::BeginPopupModal("Confirm Exit", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("This will exit shadPS4!\nAre you sure?");
+        if (ImGui::BeginPopupModal(tr("Confirm Exit").c_str(), NULL,
+                                   ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("%s", tr("This will exit shadPS4!\nAre you sure?").c_str());
             ImGui::Separator();
 
-            if (ImGui::Button("OK", ImVec2(120 * uiScale, 0))) {
+            if (ImGui::Button(tr("OK").c_str(), ImVec2(120 * uiScale, 0))) {
                 ImGui::CloseCurrentPopup();
                 done = true;
             }
             ImGui::SameLine();
 
-            if (ImGui::Button("Cancel", ImVec2(120 * uiScale, 0))) {
+            if (ImGui::Button(tr("Cancel").c_str(), ImVec2(120 * uiScale, 0))) {
                 ImGui::CloseCurrentPopup();
             }
 

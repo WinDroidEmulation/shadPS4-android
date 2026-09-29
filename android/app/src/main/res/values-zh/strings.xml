@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-FileCopyrightText: Copyright 2026 shadPS4 Android port contributors
+  SPDX-License-Identifier: GPL-2.0-or-later
+
+  Simplified Chinese (zh-Hans) translations for the Android-side UI:
+  the storage-permission dialog at first launch, plus the launcher
+  label override if the user's system language is Chinese.
+
+  Keep the keys in sync with res/values/strings.xml. The Android resource
+  system picks this folder automatically when the system locale is
+  zh-CN / zh-Hans / zh-SG / zh-HK (with fallback) etc.
+-->
+<resources>
+    <!-- Launcher label can stay as the brand name; do not translate. -->
+    <string name="app_name">shadPS4</string>
+
+    <!-- All-files-access prompt at first launch -->
+    <string name="all_files_title">访问游戏库</string>
+    <string name="all_files_message">要在共享存储中读取游戏（例如内置存储上的 Games 文件夹里的游戏），需要授予 shadPS4 “管理所有文件”权限。\n\n放在应用私有目录下的游戏不需要此权限也可以读取。</string>
+    <string name="all_files_open">授予</string>
+    <string name="all_files_later">稍后</string>
+    <string name="all_files_manual">请在系统“设置”→“应用”→“shadPS4”里打开“所有文件访问”权限。</string>
+
+    <!-- Storage permission dialog (Android 6-12, READ_EXTERNAL_STORAGE flow) -->
+    <string name="storage_title">需要存储权限</string>
+    <string name="storage_message">shadPS4 需要存储权限才能读取 PS4 游戏镜像（.pkg / .pfs / EBOOT.BIN）。游戏文件可以放在以下任一位置：\n\n• /storage/emulated/0/Games/shadPS4/\n• /storage/emulated/0/Download/shadPS4/\n• 应用私有目录（无需此权限）\n\n请在接下来弹出的系统对话框里选择“允许”。</string>
+    <string name="storage_open">授予</string>
+    <string name="storage_later">稍后</string>
+    <string name="storage_denied">存储权限被拒绝。游戏可能无法读取，请到系统设置里重新授权。</string>
+
+    <!-- Initial setup hint that pops up before the storage dialog -->
+    <string name="welcome_title">欢迎使用 shadPS4</string>
+    <string name="welcome_message">这是 Android 上的 PS4 模拟器。\n\n首次使用需要：\n1) 授予存储权限（用于读取游戏文件）\n2) 在“设置”→“游戏文件夹”里添加你存放游戏的目录\n\n之后在大图模式下选中游戏即可启动。</string>
+    <string name="welcome_continue">继续</string>
+</resources>

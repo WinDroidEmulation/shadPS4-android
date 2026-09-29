@@ -6,9 +6,22 @@
 <resources>
     <string name="app_name">shadPS4</string>
 
+    <!-- All-files-access prompt at first launch (Android 11+) -->
     <string name="all_files_title">Access game library</string>
     <string name="all_files_message">To list games stored on shared storage (for example in a Games folder on the internal storage), allow shadPS4 to access all files.\n\nGames kept inside the app folder work without this permission.</string>
     <string name="all_files_open">Allow</string>
     <string name="all_files_later">Later</string>
     <string name="all_files_manual">Open Settings, then Apps, shadPS4, and enable \"All files access\".</string>
+
+    <!-- Storage permission dialog (Android 6-12, READ_EXTERNAL_STORAGE flow) -->
+    <string name="storage_title">Storage permission required</string>
+    <string name="storage_message">shadPS4 needs storage permission to read PS4 game images (.pkg / .pfs / EBOOT.BIN). You can place games in any of these locations:\n\n• /storage/emulated/0/Games/shadPS4/\n• /storage/emulated/0/Download/shadPS4/\n• The app private directory (no permission needed)\n\nPlease tap \"Allow\" in the next system dialog.</string>
+    <string name="storage_open">Allow</string>
+    <string name="storage_later">Later</string>
+    <string name="storage_denied">Storage permission denied. Games may not be readable; please re-grant the permission in System Settings.</string>
+
+    <!-- First-launch welcome -->
+    <string name="welcome_title">Welcome to shadPS4</string>
+    <string name="welcome_message">This is a PS4 emulator for Android.\n\nFirst-time setup:\n1) Grant storage permission (to read game files)\n2) Add the folder containing your games under Settings → Game Folders\n\nThen pick a game in Big Picture mode to launch.</string>
+    <string name="welcome_continue">Continue</string>
 </resources>

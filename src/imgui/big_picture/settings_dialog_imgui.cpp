@@ -12,12 +12,15 @@
 #include "common/path_util.h"
 #include "core/devtools/layer.h"
 #include "imgui/imgui_std.h"
+#include "imgui/imgui_translations.h"
 #include "settings_dialog_imgui.h"
 
 CMRC_DECLARE(res);
 
 constexpr float gameImageSize = 200.f;
 constexpr float settingsIconSize = 125.f;
+
+using ImguiTranslate::tr;
 
 namespace ImGuiEmuSettings {
 
@@ -331,18 +334,18 @@ void SettingsWindow::DrawCategoryTabs() {
 
     // Must add categories in enum order for L1/R1 to work correctly
     if (!isGameRunning) {
-        AddCategory("Profiles", profilesTexture, SettingsCategory::Profiles);
+        AddCategory(tr("Profiles"), profilesTexture, SettingsCategory::Profiles);
     }
 
-    AddCategory("General", generalTexture, SettingsCategory::General);
-    AddCategory("Graphics", graphicsTexture, SettingsCategory::Graphics);
-    AddCategory("Input", inputTexture, SettingsCategory::Input);
-    AddCategory("Trophy", trophyTexture, SettingsCategory::Trophy);
-    AddCategory("Game Folders", foldersTexture, SettingsCategory::Folders);
-    AddCategory("Log", logTexture, SettingsCategory::Log);
+    AddCategory(tr("General"), generalTexture, SettingsCategory::General);
+    AddCategory(tr("Graphics"), graphicsTexture, SettingsCategory::Graphics);
+    AddCategory(tr("Input"), inputTexture, SettingsCategory::Input);
+    AddCategory(tr("Trophy"), trophyTexture, SettingsCategory::Trophy);
+    AddCategory(tr("Game Folders"), foldersTexture, SettingsCategory::Folders);
+    AddCategory(tr("Log"), logTexture, SettingsCategory::Log);
 
     if (currentProfile != "Global") {
-        AddCategory("Experimental", experimentalTexture, SettingsCategory::Experimental);
+        AddCategory(tr("Experimental"), experimentalTexture, SettingsCategory::Experimental);
     }
 
     ImGui::PopStyleVar();
@@ -423,28 +426,34 @@ void SettingsWindow::DrawMainContent(bool* open, const std::function<void()>& ap
     ImGui::SameLine();
 
     // Align buttons right
-    float buttonsWidth = ImGui::CalcTextSize("Save").x + ImGui::CalcTextSize("Cancel").x +
-                         ImGui::CalcTextSize("Apply").x + ImGui::GetStyle().FramePadding.x * 6.0f +
+    const auto save_label = tr("Save");
+    const auto cancel_label = tr("Cancel");
+    const auto apply_label = tr("Apply");
+    float buttonsWidth = ImGui::CalcTextSize(save_label.c_str()).x +
+                         ImGui::CalcTextSize(cancel_label.c_str()).x +
+                         ImGui::CalcTextSize(apply_label.c_str()).x +
+                         ImGui::GetStyle().FramePadding.x * 6.0f +
                          ImGui::GetStyle().ItemSpacing.x * 2;
     ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - buttonsWidth);
 
-    if (ImGui::Button("Save")) {
+    if (ImGui::Button(save_label.c_str())) {
         closeOnSave = true;
-        ImGui::OpenPopup("Save Confirmation");
+        ImGui::OpenPopup(tr("Save Confirmation").c_str());
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Apply")) {
-        ImGui::OpenPopup("Save Confirmation");
+    if (ImGui::Button(apply_label.c_str())) {
+        ImGui::OpenPopup(tr("Save Confirmation").c_str());
     }
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::BeginPopupModal("Save Confirmation", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("%s", ("Profile Saved:\n" + currentProfile).c_str());
+    if (ImGui::BeginPopupModal(tr("Save Confirmation").c_str(), nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("%s", (tr("Profile Saved:\n") + currentProfile).c_str());
         ImGui::Separator();
 
-        if (ImGui::Button("OK", ImVec2(250 * uiScale, 0))) {
+        if (ImGui::Button(tr("OK").c_str(), ImVec2(250 * uiScale, 0))) {
             std::string profile = currentProfile;
             if (currentProfile != "Global") {
                 profile = currentProfile.substr(0, 9);
@@ -468,7 +477,7 @@ void SettingsWindow::DrawMainContent(bool* open, const std::function<void()>& ap
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Cancel")) {
+    if (ImGui::Button(cancel_label.c_str())) {
         DeInit();
         *open = false;
         if (applySettings) {
@@ -544,13 +553,14 @@ void SettingsWindow::DrawProfileSelector() {
     }
 
     if (deleteProfileIndex != -1) {
-        ImGui::OpenPopup("Confirm Delete");
+        ImGui::OpenPopup(tr("Confirm Delete").c_str());
     }
 
     ImGui::PopStyleVar(3);
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::BeginPopupModal("Confirm Delete", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal(tr("Confirm Delete").c_str(), nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
         const std::string title = profileIcons[deleteProfileIndex].title;
         const std::string message = "Delete game-specific config file for " + title + "?";
         const std::filesystem::path path =
@@ -560,7 +570,7 @@ void SettingsWindow::DrawProfileSelector() {
         ImGui::Text("%s", message.c_str());
         ImGui::Separator();
 
-        if (ImGui::Button("OK", ImVec2(120 * uiScale, 0))) {
+        if (ImGui::Button(tr("OK").c_str(), ImVec2(120 * uiScale, 0))) {
             try {
                 std::filesystem::remove(path);
             } catch (const std::exception& e) {
@@ -574,7 +584,7 @@ void SettingsWindow::DrawProfileSelector() {
         }
         ImGui::SameLine();
 
-        if (ImGui::Button("Cancel", ImVec2(120 * uiScale, 0))) {
+        if (ImGui::Button(tr("Cancel").c_str(), ImVec2(120 * uiScale, 0))) {
             deleteProfileIndex = -1;
             ImGui::CloseCurrentPopup();
         }
@@ -594,8 +604,9 @@ void SettingsWindow::DrawGameFolderManager() {
     ImGui::BeginChild("ContentRegion", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), child_flags,
                       window_flags);
 
-    if (ImGui::Button("Add Folder", ImVec2(400.f * uiScale, 0))) {
-        ImGuiFileDialog::Instance()->OpenDialog("OpenFolder", "Add shadPS4 game folder", nullptr,
+    if (ImGui::Button(tr("Add Folder").c_str(), ImVec2(400.f * uiScale, 0))) {
+        ImGuiFileDialog::Instance()->OpenDialog("OpenFolder",
+                                                tr("Add shadPS4 game folder").c_str(), nullptr,
                                                 ".", 1, nullptr,
                                                 ImGuiFileDialogFlags_DisableCreateDirectoryButton |
                                                     ImGuiFileDialogFlags_DontShowHiddenFiles);
@@ -685,10 +696,10 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 500.0f * uiScale);
             ImGui::TableSetupColumn("Value");
 
-            AddSettingCombo("Console Language", consoleLanguageSetting, languageOptions);
-            AddSettingSliderInt("Volume", volumeSetting, 0, 500);
-            AddSettingCheckbox("Show Splash Screen When Launching Game", showSplashSetting);
-            AddSettingCombo("Audio Backend", audioBackendSetting, audioBackendOptions);
+            AddSettingCombo(tr("Console Language"), consoleLanguageSetting, languageOptions);
+            AddSettingSliderInt(tr("Volume"), volumeSetting, 0, 500);
+            AddSettingCheckbox(tr("Show Splash Screen When Launching Game"), showSplashSetting);
+            AddSettingCombo(tr("Audio Backend"), audioBackendSetting, audioBackendOptions);
 
             ImGui::EndTable();
         }
@@ -697,19 +708,19 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 500.0f * uiScale);
             ImGui::TableSetupColumn("Value");
 
-            AddSettingCombo("Display Mode", fullscreenModeSetting, fullscreenModeOptions);
-            AddSettingCombo("Present Mode", presentModeSetting, presentModeOptions);
-            AddSettingSliderInt("Window Width", windowWidthSetting, 0, 8000);
-            AddSettingSliderInt("Window Height", windowHeightSetting, 0, 7000);
-            AddSettingCheckbox("Enable HDR", hdrAllowedSetting);
-            AddSettingCheckbox("Enable FSR", fsrEnabledSetting);
+            AddSettingCombo(tr("Display Mode"), fullscreenModeSetting, fullscreenModeOptions);
+            AddSettingCombo(tr("Present Mode"), presentModeSetting, presentModeOptions);
+            AddSettingSliderInt(tr("Window Width"), windowWidthSetting, 0, 8000);
+            AddSettingSliderInt(tr("Window Height"), windowHeightSetting, 0, 7000);
+            AddSettingCheckbox(tr("Enable HDR"), hdrAllowedSetting);
+            AddSettingCheckbox(tr("Enable FSR"), fsrEnabledSetting);
 
             if (fsrEnabledSetting) {
-                AddSettingCheckbox("Enable RCAS", rcasEnabledSetting);
+                AddSettingCheckbox(tr("Enable RCAS"), rcasEnabledSetting);
             }
 
             if (rcasEnabledSetting && fsrEnabledSetting) {
-                AddSettingSliderFloat("RCAS Attenuation", rcasAttenuationSetting, 0.0f, 3.0f, 3);
+                AddSettingSliderFloat(tr("RCAS Attenuation"), rcasAttenuationSetting, 0.0f, 3.0f, 3);
             }
 
             ImGui::EndTable();
@@ -719,12 +730,12 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 500.0f * uiScale);
             ImGui::TableSetupColumn("Value");
 
-            AddSettingCheckbox("Enable Motion Controls", motionControlsSetting);
-            AddSettingCheckbox("Enable Background Controller Input", backgroundControllerSetting);
-            AddSettingCombo("Hide Cursor", cursorStateSetting, hideCursorOptions);
+            AddSettingCheckbox(tr("Enable Motion Controls"), motionControlsSetting);
+            AddSettingCheckbox(tr("Enable Background Controller Input"), backgroundControllerSetting);
+            AddSettingCombo(tr("Hide Cursor"), cursorStateSetting, hideCursorOptions);
 
             if (cursorStateSetting == 1) {
-                AddSettingSliderInt("Hide Cursor Idle Timeout", cursorTimeoutSetting, 1, 10);
+                AddSettingSliderInt(tr("Hide Cursor Idle Timeout"), cursorTimeoutSetting, 1, 10);
             }
 
             ImGui::EndTable();
@@ -734,11 +745,11 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 500.0f * uiScale);
             ImGui::TableSetupColumn("Value");
 
-            AddSettingCheckbox("Disable Trophy Notification", trophyPopupDisabledSetting);
+            AddSettingCheckbox(tr("Disable Trophy Notification"), trophyPopupDisabledSetting);
             if (!trophyPopupDisabledSetting) {
-                AddSettingCombo("Trophy Notification Position", trophySideSetting,
+                AddSettingCombo(tr("Trophy Notification Position"), trophySideSetting,
                                 trophySideOptions);
-                AddSettingSliderFloat("Trophy Notification Duration", trophyDurationSetting, 0.f,
+                AddSettingSliderFloat(tr("Trophy Notification Duration"), trophyDurationSetting, 0.f,
                                       10.f, 1);
             }
 
@@ -749,10 +760,10 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 500.0f * uiScale);
             ImGui::TableSetupColumn("Value");
 
-            AddSettingCheckbox("Enable Logging", logEnableSetting);
+            AddSettingCheckbox(tr("Enable Logging"), logEnableSetting);
             if (logEnableSetting) {
-                AddSettingCheckbox("Separate Log Files", logSeparateSetting);
-                AddSettingCheckbox("Log Sync", logSyncSetting);
+                AddSettingCheckbox(tr("Separate Log Files"), logSeparateSetting);
+                AddSettingCheckbox(tr("Log Sync"), logSyncSetting);
             }
 
             ImGui::EndTable();
@@ -762,25 +773,25 @@ void SettingsWindow::DrawSettingsTable(SettingsCategory category) {
             ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 500.0f * uiScale);
             ImGui::TableSetupColumn("Value");
 
-            AddSettingSliderInt("Additional DMem Allocation", extraDmemSetting, 0, 20000);
-            AddSettingSliderInt("Vblank Frequency", vblankFrequencySetting, 30, 360);
-            AddSettingCombo("Readbacks Mode", readbacksModeSetting, readbacksModeOptions);
-            AddSettingCheckbox("Enable Readback Linear Images", readbackLinearImagesSetting);
-            AddSettingCheckbox("Enable Direct Memory Access", directMemoryAccessSetting);
+            AddSettingSliderInt(tr("Additional DMem Allocation"), extraDmemSetting, 0, 20000);
+            AddSettingSliderInt(tr("Vblank Frequency"), vblankFrequencySetting, 30, 360);
+            AddSettingCombo(tr("Readbacks Mode"), readbacksModeSetting, readbacksModeOptions);
+            AddSettingCheckbox(tr("Enable Readback Linear Images"), readbackLinearImagesSetting);
+            AddSettingCheckbox(tr("Enable Direct Memory Access"), directMemoryAccessSetting);
 #ifdef _WIN32
             // Windows static guest red-zone protection
-            AddSettingCombo("Windows Guest Red Zone Protection (Requires Restart)",
+            AddSettingCombo(tr("Windows Guest Red Zone Protection (Requires Restart)"),
                             windowsGuestRedZoneProtectionModeSetting,
                             windowsGuestRedZoneProtectionModeOptions);
 #endif
-            AddSettingCheckbox("Enable Devkit Console Mode", devkitConsoleSetting);
-            AddSettingCheckbox("Enable PS4 Neo Mode", neoModeSetting);
-            AddSettingCheckbox("Enable ShadNet", shadnetEnabledSetting);
-            AddSettingCheckbox("Set Network Connected to True", connectedNetworkSetting);
-            AddSettingCheckbox("Enable Shader Cache", pipelineCacheEnabledSetting);
+            AddSettingCheckbox(tr("Enable Devkit Console Mode"), devkitConsoleSetting);
+            AddSettingCheckbox(tr("Enable PS4 Neo Mode"), neoModeSetting);
+            AddSettingCheckbox(tr("Enable ShadNet"), shadnetEnabledSetting);
+            AddSettingCheckbox(tr("Set Network Connected to True"), connectedNetworkSetting);
+            AddSettingCheckbox(tr("Enable Shader Cache"), pipelineCacheEnabledSetting);
 
             if (pipelineCacheEnabledSetting) {
-                AddSettingCheckbox("Compress Shader Cache to Zip File",
+                AddSettingCheckbox(tr("Compress Shader Cache to Zip File"),
                                    pipelineCacheArchiveSetting);
             }
 
