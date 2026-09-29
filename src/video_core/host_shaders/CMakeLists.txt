@@ -1,7 +1,20 @@
 # SPDX-FileCopyrightText: Copyright 2023 Citra Emulator Project
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-if (TARGET glslang-standalone)
+# Android port: when cross-compiling for arm64-v8a the host-built
+# glslang standalone compiler is supplied through HOST_GLSLANG_EXECUTABLE
+# (see android/build_native.sh + android/cmake/CMakeLists.txt). The
+# target-built glslang-standalone would be an ARM64 binary that cannot
+# run on the x86_64 build host, so prefer the host executable directly.
+if(CMAKE_CROSSCOMPILING AND HOST_GLSLANG_EXECUTABLE)
+    if(NOT EXISTS "${HOST_GLSLANG_EXECUTABLE}")
+        message(FATAL_ERROR
+            "HOST_GLSLANG_EXECUTABLE is set but does not exist: "
+            "${HOST_GLSLANG_EXECUTABLE}")
+    endif()
+    set(GLSLANG_COMPILER "${HOST_GLSLANG_EXECUTABLE}")
+    message(STATUS "Using host glslang-standalone: ${GLSLANG_COMPILER}")
+elseif (TARGET glslang-standalone)
     set(GLSLANG_COMPILER glslang-standalone)
 elseif (TARGET glslang::glslang-standalone)
     set(GLSLANG_COMPILER glslang::glslang-standalone)
