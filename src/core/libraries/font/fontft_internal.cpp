@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "common/atomic_ref.h"
 #include "core/libraries/font/fontft_internal.h"
 
 #include <algorithm>
@@ -394,7 +395,7 @@ bool AcquireFontLock(Libraries::Font::FontHandleOpaqueNative* font, u32& out_pre
             Libraries::Kernel::sceKernelUsleep(0x1e);
             continue;
         }
-        std::atomic_ref<u32> ref(font->lock_word);
+        Common::atomic_ref<u32> ref(font->lock_word);
         u32 expected = lock_word;
         if (ref.compare_exchange_weak(expected, lock_word | 0x80000000u,
                                       std::memory_order_acq_rel)) {
@@ -426,7 +427,7 @@ bool AcquireCachedStyleLock(Libraries::Font::FontHandleOpaqueNative* font,
             Libraries::Kernel::sceKernelUsleep(0x1e);
             continue;
         }
-        std::atomic_ref<u32> ref(font->cached_style.cache_lock_word);
+        Common::atomic_ref<u32> ref(font->cached_style.cache_lock_word);
         u32 expected = lock_word;
         if (ref.compare_exchange_weak(expected, lock_word | 0x80000000u,
                                       std::memory_order_acq_rel)) {
@@ -488,7 +489,7 @@ std::uint8_t* AcquireFontCtxEntry(std::uint8_t* ctx, u32 idx, u32 mode_low, void
     for (;;) {
         const u32 cur = *lock_word;
         if (static_cast<s32>(cur) >= 0) {
-            std::atomic_ref<u32> ref(*lock_word);
+            Common::atomic_ref<u32> ref(*lock_word);
             u32 expected = cur;
             if (ref.compare_exchange_weak(expected, cur | 0x80000000u, std::memory_order_acq_rel)) {
                 *out_lock_word = cur | 0x80000000u;
@@ -571,7 +572,7 @@ static std::uintptr_t AcquireRendererSelectionLock(RendererOpaque* renderer) {
     for (;;) {
         const std::uintptr_t cur = reinterpret_cast<std::uintptr_t>(renderer->selection);
         if (cur != kLocked) {
-            std::atomic_ref<void*> ref(renderer->selection);
+            Common::atomic_ref<void*> ref(renderer->selection);
             void* expected = reinterpret_cast<void*>(cur);
             if (ref.compare_exchange_weak(expected, reinterpret_cast<void*>(kLocked),
                                           std::memory_order_acq_rel)) {

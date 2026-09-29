@@ -20,6 +20,9 @@
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #include <date/tz.h>
 #endif
+#if defined(__ANDROID__)
+#include <ctime>
+#endif
 #include <ctime>
 #include <sys/resource.h>
 #include <sys/time.h>
@@ -501,12 +504,36 @@ s32 PS4_SYSV_ABI sceKernelConvertUtcToLocaltime(time_t time, time_t* local_time,
         *dst_sec = res == TIME_ZONE_ID_DAYLIGHT ? -_dstbias : 0;
     }
 #else
-#if defined(__APPLE__) || defined(__FreeBSD__)
+#if defined(__ANDROID__)
+    // libc++ (NDK r27) does not ship a complete chrono tzdb yet. Derive the
+    // local time information from the C library instead, which honours the
+    // system timezone on Android.
+    const std::time_t tnow = static_cast<std::time_t>(time);
+    std::tm tm_local{};
+    localtime_r(&tnow, &tm_local);
+    const s64 dst_sec_value = tm_local.tm_isdst > 0 ? 3600 : 0;
+    const s64 std_offset = static_cast<s64>(tm_local.tm_gmtoff) - dst_sec_value;
+
+    *local_time = time + tm_local.tm_gmtoff;
+
+    if (st != nullptr) {
+        st->t = time;
+        st->west_sec = std_offset;
+        st->dst_sec = dst_sec_value;
+    }
+
+    if (dst_sec != nullptr) {
+        *dst_sec = dst_sec_value;
+    }
+
+    return ORBIS_OK;
+#elif defined(__APPLE__) || defined(__FreeBSD__)
     // std::chrono::current_zone() not available yet.
     const auto* time_zone = date::current_zone();
 #else
     const auto* time_zone = std::chrono::current_zone();
 #endif // __APPLE__
+#if !defined(__ANDROID__)
     auto info = time_zone->get_info(std::chrono::system_clock::now());
 
     *local_time = info.offset.count() + info.save.count() * 60 + time;
@@ -520,6 +547,7 @@ s32 PS4_SYSV_ABI sceKernelConvertUtcToLocaltime(time_t time, time_t* local_time,
     if (dst_sec != nullptr) {
         *dst_sec = info.save.count() * 60;
     }
+#endif // !__ANDROID__
 #endif // _WIN32
 
     return ORBIS_OK;

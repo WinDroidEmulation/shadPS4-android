@@ -1011,10 +1011,18 @@ int PS4_SYSV_ABI sceNetEpollWait(OrbisNetId epollid, OrbisNetEpollEvent* events,
     int result = ORBIS_OK;
     if (sockets_waited_on) {
 #ifdef __linux__
+#if defined(__ANDROID__) && __ANDROID_API__ < 30
+        // bionic lacks the epoll_pwait2 wrapper before API 30; fall back to
+        // epoll_wait with a millisecond timeout (sub-millisecond precision is
+        // not meaningful here anyway).
+        result = epoll_wait(epoll->epoll_fd, native_events.data(), maxevents,
+                            timeout < 0 ? timeout : (timeout + 999) / 1000);
+#else
         const timespec epoll_timeout{.tv_sec = timeout / 1000000,
                                      .tv_nsec = (timeout % 1000000) * 1000};
         result = epoll_pwait2(epoll->epoll_fd, native_events.data(), maxevents,
                               timeout < 0 ? nullptr : &epoll_timeout, nullptr);
+#endif
 #else
         result = epoll_wait(epoll->epoll_fd, native_events.data(), maxevents,
                             timeout < 0 ? timeout : timeout / 1000);
@@ -1356,8 +1364,8 @@ const char* freebsd_inet_ntop6(const unsigned char* src, char* dst, u64 size) {
 
     /*
      * Preprocess:
-     *	Copy the input (bytewise) array into a wordwise array.
-     *	Find the longest run of 0x00's in src[] for :: shorthanding.
+     *  Copy the input (bytewise) array into a wordwise array.
+     *  Find the longest run of 0x00's in src[] for :: shorthanding.
      */
     memset(words, '\0', sizeof words);
     for (i = 0; i < NS_IN6ADDRSZ; i++)

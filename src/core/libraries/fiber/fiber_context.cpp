@@ -7,6 +7,7 @@
 asm(".att_syntax prefix");
 #endif
 
+#if defined(__x86_64__)
 asm(R"(
 .global _sceFiberSetJmp
 _sceFiberSetJmp:
@@ -127,3 +128,87 @@ _sceFiberSwitchEntry:
     call _sceFiberForceQuit
     ret
 )");
+#elif defined(__aarch64__)
+// AArch64 fiber context switching.
+//
+// Register save area layout inside OrbisFiberContext (see fiber.h):
+//   0x00 x19        0x08 x20        0x10 x21        0x18 x22
+//   0x20 sp (rsp)   0x28 x29 (rbp)  0x30 x30 (lr)   0x38 x23
+//   0x40 x24        0x48 x25        0x50 x26        0x58 x27
+//   0x60 x28        0x68 d8         0x70 fpcr       0x74 fpsr
+//   0x78 d9 .. 0xA8 d15 (fp_regs extension in OrbisFiberContext)
+// The ctx.rsp / ctx.rbp fields keep the same meaning they have on x86_64.
+asm(R"(
+.global _sceFiberSetJmp
+_sceFiberSetJmp:
+    stp x19, x20, [x0]
+    stp x21, x22, [x0, #16]
+    mov x10, sp
+    str x10, [x0, #32]
+    stp x29, x30, [x0, #40]
+    stp x23, x24, [x0, #56]
+    stp x25, x26, [x0, #72]
+    stp x27, x28, [x0, #88]
+    str d8, [x0, #104]
+    mrs x10, fpcr
+    str w10, [x0, #112]
+    mrs x10, fpsr
+    str w10, [x0, #116]
+    stp d9, d10, [x0, #120]
+    stp d11, d12, [x0, #136]
+    stp d13, d14, [x0, #152]
+    str d15, [x0, #168]
+    mov w0, wzr
+    ret
+
+.global _sceFiberLongJmp
+_sceFiberLongJmp:
+    ldp x19, x20, [x0]
+    ldp x21, x22, [x0, #16]
+    ldr x10, [x0, #32]
+    mov sp, x10
+    ldp x29, x30, [x0, #40]
+    ldp x23, x24, [x0, #56]
+    ldp x25, x26, [x0, #72]
+    ldp x27, x28, [x0, #88]
+    ldr d8, [x0, #104]
+    ldr w10, [x0, #112]
+    msr fpcr, x10
+    ldr w10, [x0, #116]
+    msr fpsr, x10
+    ldp d9, d10, [x0, #120]
+    ldp d11, d12, [x0, #136]
+    ldp d13, d14, [x0, #152]
+    ldr d15, [x0, #168]
+    mov w0, #1
+    ret
+
+.global _sceFiberSwitchEntry
+_sceFiberSwitchEntry:
+    // x0 = OrbisFiberData*, w1 = set_fpu
+    mov x11, x0
+    // Switch to the fiber stack (data->stack_addr at 0x18)
+    ldr x16, [x11, #24]
+    mov sp, x16
+    // Terminate the frame-pointer chain
+    mov x29, xzr
+    // Mark the previous fiber state Idle (data->state at 0x20)
+    ldr x10, [x11, #32]
+    cbz x10, 1f
+    mov w9, #2
+    str w9, [x10]
+1:
+    // Start the fiber with a clean FP control state.
+    msr fpcr, xzr
+    msr fpsr, xzr
+    // Call the fiber's entry function: entry(arg_on_initialize, arg_on_run_to)
+    ldr x0, [x11, #8]
+    ldr x1, [x11, #16]
+    ldr x9, [x11]
+    blr x9
+    // Fiber returned, not good
+    mov w0, #1
+    bl _sceFiberForceQuit
+    ret
+)");
+#endif

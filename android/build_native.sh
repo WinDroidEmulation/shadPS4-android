@@ -30,12 +30,13 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 : "${SHADPS4_ANDROID_SDK:=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-auto}}}"
 : "${SHADPS4_ANDROID_NDK:=auto}"
-: "${SHADPS4_NDK_VERSION:=27.0.12077973}"
+: "${SHADPS4_NDK_VERSION:=28.1.13356709}"
 : "${SHADPS4_ABI:=arm64-v8a}"
 : "${SHADPS4_PLATFORM:=android-29}"
 : "${FFMPEG_VERSION:=7.1.1}"
 : "${FFMPEG_SRC_DIR:=}"                  # optional pre-extracted FFmpeg source
 : "${SHADPS4_SKIP_HOSTPROTOC:=0}"
+: "${GLSLANG_HOST_BIN:=}"               # set by build_host_protoc; may be pre-set when skipping
 : "${SHADPS4_SKIP_FFMPEG:=0}"
 : "${SHADPS4_SKIP_CMAKE:=0}"
 : "${SHADPS4_SKIP_JNILIBS:=0}"
@@ -126,21 +127,23 @@ build_host_protoc() {
         [[ -x "${PROTOC_BIN}" ]] || die "protoc missing at ${PROTOC_BIN} but the build was skipped."
         return 0
     fi
-    if [[ -x "${PROTOC_BIN}" ]]; then
-        log "Host protoc already present: ${PROTOC_BIN}"
-        return 0
-    fi
-
-    log "Building host protoc (vendored protobuf + abseil)..."
+    log "Building host tools (protoc + font embedder + glslang)..."
     cmake -G Ninja \
         -S "${SCRIPT_DIR}/cmake" \
         -B "${BUILD_DIR}/host-protoc" \
         -DHOST_PROTOC_ROOT="${ROOT_DIR}" \
         -DCMAKE_BUILD_TYPE=Release
-    cmake --build "${BUILD_DIR}/host-protoc" --target protoc -j"${JOBS}"
+    cmake --build "${BUILD_DIR}/host-protoc" --target protoc Dear_ImGui_FontEmbed glslang-standalone -j"${JOBS}"
 
     [[ -x "${PROTOC_BIN}" ]] || die "protoc was not produced at ${PROTOC_BIN}."
     log "Host protoc OK: ${PROTOC_BIN}"
+    [[ -x "${BUILD_DIR}/host-protoc/Dear_ImGui_FontEmbed" ]] \
+        || die "Dear_ImGui_FontEmbed was not produced."
+    log "Host font embed tool OK: ${BUILD_DIR}/host-protoc/Dear_ImGui_FontEmbed"
+    GLSLANG_HOST_BIN=$(find "${BUILD_DIR}/host-protoc" -type f -name 'glslang*' -perm -u+x \
+        | grep -vE '\.(so|a)$' | head -n 1 || true)
+    [[ -n "${GLSLANG_HOST_BIN}" ]] || die "glslang standalone compiler was not produced."
+    log "Host glslang compiler OK: ${GLSLANG_HOST_BIN}"
 }
 
 # ---------------------------------------------------------------------------
@@ -302,6 +305,10 @@ run_cmake() {
     fi
 
     log "Configuring shadPS4 for Android (${BUILD_TYPE})..."
+    # The NDK's libc++ hides std::jthread/stop_token behind its
+    # "experimental" gate even though the implementation (and the prebuilt
+    # libc++ runtime) is complete. Re-enable it for the emulator sources,
+    # which rely on cooperative cancellation.
     cmake -G Ninja \
         -S "${ROOT_DIR}" \
         -B "${BUILD_DIR}/cmake-out" \
@@ -309,7 +316,10 @@ run_cmake() {
         -DANDROID_ABI="${SHADPS4_ABI}" \
         -DANDROID_PLATFORM="${SHADPS4_PLATFORM}" \
         -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+        -DCMAKE_CXX_FLAGS="-D_LIBCPP_ENABLE_EXPERIMENTAL" \
         -DPROTOC_HOST_EXECUTABLE="${PROTOC_BIN}" \
+        -DHOST_FONT_EMBED_EXECUTABLE="${BUILD_DIR}/host-protoc/Dear_ImGui_FontEmbed" \
+        -DHOST_GLSLANG_EXECUTABLE="${GLSLANG_HOST_BIN}" \
         -DFFMPEG_ANDROID_PREFIX="${FFMPEG_PREFIX}"
 
     log "Building (this compiles the emulator core, SDL3 and all externals)..."

@@ -23,7 +23,7 @@ concurrency:
 
 env:
   FFMPEG_VERSION: "7.1.1"
-  NDK_VERSION: "27.0.12077973"
+  NDK_VERSION: "28.1.13356709"
 
 jobs:
   android:

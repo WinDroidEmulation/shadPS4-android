@@ -50,3 +50,30 @@ set(protobuf_FORCE_FETCH_DEPENDENCIES OFF)
 add_subdirectory("${HOST_PROTOC_ROOT}/externals/protobuf"
                  "${CMAKE_CURRENT_BINARY_DIR}/protobuf"
                  EXCLUDE_FROM_ALL SYSTEM)
+
+# Host build of the ImGui font-embedding tool. The main NDK build executes
+# Dear_ImGui_FontEmbed at build time to turn the bundled fonts into C++
+# sources; a cross-compiled copy cannot run on the build host, so the Android
+# build receives this native executable through HOST_FONT_EMBED_EXECUTABLE.
+add_executable(Dear_ImGui_FontEmbed
+               "${HOST_PROTOC_ROOT}/externals/imgui/misc/fonts/binary_to_compressed_c.cpp")
+
+# Host build of the glslang standalone shader compiler. glslang disables its
+# binaries when ANDROID is set, but the main build's host_shaders step still
+# needs to run the compiler on the build host, so build it here natively and
+# hand it over through HOST_GLSLANG_EXECUTABLE.
+set(SKIP_GLSLANG_INSTALL ON CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_BINARIES ON CACHE BOOL "" FORCE)
+set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
+set(ENABLE_CTEST OFF CACHE BOOL "" FORCE)
+set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
+set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
+add_subdirectory("${HOST_PROTOC_ROOT}/externals/glslang"
+                 "${CMAKE_CURRENT_BINARY_DIR}/glslang"
+                 EXCLUDE_FROM_ALL)
+
+# The top-level CMAKE_RUNTIME_OUTPUT_DIRECTORY would place the binary next to
+# the "glslang" subdirectory (name collision), so give it its own folder.
+set_target_properties(glslang-standalone PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/host-tools")

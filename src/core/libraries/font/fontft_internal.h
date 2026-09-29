@@ -109,10 +109,12 @@ namespace Libraries::Font::Internal {
 struct alignas(16) LayoutWord {
     std::array<u32, 4> words{};
 
-    constexpr u8* data() {
+    // NOTE: not constexpr — the reinterpret_cast can never produce a
+    // constant expression, which newer clang diagnoses as an error.
+    u8* data() {
         return reinterpret_cast<u8*>(words.data());
     }
-    constexpr const u8* data() const {
+    const u8* data() const {
         return reinterpret_cast<const u8*>(words.data());
     }
 };

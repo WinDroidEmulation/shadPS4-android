@@ -38,6 +38,14 @@ struct OrbisFiberContext {
         u64 rax, rcx, rdx, rbx, rsp, rbp, r8, r9, r10, r11, r12, r13, r14, r15;
         u16 fpucw;
         u32 mxcsr;
+#if defined(__aarch64__)
+        // AArch64 register save-area extension. The x86_64 layout above is
+        // preserved so that ctx.rsp / ctx.rbp keep their meaning for the
+        // C++ code; the AArch64 assembly in fiber_context.cpp stores the
+        // remaining callee-saved floating point registers (d9..d15; d8 reuses
+        // the r15 slot and fpcr/fpsr reuse fpucw/mxcsr) in these fields.
+        u64 d9, d10, d11, d12, d13, d14, d15;
+#endif
     };
     OrbisFiber* current_fiber;
     OrbisFiber* prev_fiber;

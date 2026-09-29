@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "common/atomic_ref.h"
 #include "font_internal.h"
 
 #include <array>
@@ -798,7 +799,7 @@ bool AcquireLibraryLock(FontLibOpaque* lib, u32& out_prev_lock_word) {
             continue;
         }
 
-        std::atomic_ref<u32> ref(lib->lock_word);
+        Common::atomic_ref<u32> ref(lib->lock_word);
         u32 expected = lock_word;
         if (ref.compare_exchange_weak(expected, lock_word | 0x80000000u,
                                       std::memory_order_acq_rel)) {

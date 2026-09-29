@@ -437,3 +437,7 @@ android/app/src/main/jniLibs/
 # Studio rule "[Ll]og/" above silently excludes externals/abseil-cpp/absl/log/
 # when vendoring, which breaks the protobuf build (absl::log* targets).
 !externals/abseil-cpp/absl/log/
+
+# zstd vendored sources need their build/cmake dir (ignored by [Bb]uild/ above)
+!externals/zstd/build/
+!externals/zstd/build/**

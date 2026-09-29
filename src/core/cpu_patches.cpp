@@ -27,6 +27,12 @@
 #include "core/tls.h"
 #include "cpu_patches.h"
 
+#if defined(ARCH_X86_64)
+// Everything in this file rewrites x86_64 guest machine code in place and
+// therefore only makes sense (and compiles) on x86_64 hosts. On AArch64 the
+// guest code cannot execute natively anyway, so inert implementations of the
+// public entry points are provided at the bottom of the file.
+
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -2203,3 +2209,38 @@ void PrePatchInstructions(u64 segment_addr, u64 segment_size) {
 }
 
 } // namespace Core
+
+#else // !ARCH_X86_64
+
+// AArch64 (and other non-x86_64) hosts: the guest images are x86_64 and
+// cannot run natively, so there is no guest code to patch. Keep the public
+// API alive with inert implementations so the emulator shell builds.
+
+namespace Core::WindowsGuestRedZoneProtection {
+
+void SetActiveMode(WindowsGuestRedZoneProtectionMode mode) noexcept {}
+WindowsGuestRedZoneProtectionMode GetActiveMode() noexcept {
+    return WindowsGuestRedZoneProtectionMode::Disabled;
+}
+bool IsStaticPatchingEnabled() noexcept {
+    return false;
+}
+
+} // namespace Core::WindowsGuestRedZoneProtection
+
+namespace Core {
+
+void RegisterPatchModule(void* module_ptr, u64 module_size, void* trampoline_area_ptr,
+                         u64 trampoline_area_size) {}
+
+void PrePatchInstructions(u64 segment_addr, u64 segment_size) {}
+
+RedZonePatchResult PatchRedZoneMemoryInstructions(u64 segment_addr, u64 segment_size,
+                                                  std::span<const uintptr_t> function_starts) {
+    return {};
+}
+
+} // namespace Core
+
+#endif
+

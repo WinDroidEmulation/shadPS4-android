@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "common/atomic_ref.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -626,7 +627,7 @@ s32 PS4_SYSV_ABI sceFontAttachDeviceCacheBuffer(OrbisFontLib library, void* buff
     for (;;) {
         current_cache = lib->device_cache_buf;
         if (current_cache != kBusy) {
-            std::atomic_ref<u32*> ref(lib->device_cache_buf);
+            Common::atomic_ref<u32*> ref(lib->device_cache_buf);
             u32* expected = current_cache;
             if (ref.compare_exchange_weak(expected, kBusy, std::memory_order_acq_rel)) {
                 current_cache = expected;
@@ -902,7 +903,7 @@ s32 PS4_SYSV_ABI sceFontClearDeviceCache(OrbisFontLib library) {
     for (;;) {
         current_cache = lib->device_cache_buf;
         if (current_cache != kBusy) {
-            std::atomic_ref<u32*> ref(lib->device_cache_buf);
+            Common::atomic_ref<u32*> ref(lib->device_cache_buf);
             u32* expected = current_cache;
             if (ref.compare_exchange_weak(expected, kBusy, std::memory_order_acq_rel)) {
                 current_cache = expected;
@@ -1532,7 +1533,7 @@ s32 PS4_SYSV_ABI sceFontDestroyRenderer(OrbisFontRenderer* pRenderer) {
         for (;;) {
             selection_value = reinterpret_cast<std::uintptr_t>(renderer->selection);
             if (selection_value != kBusy) {
-                std::atomic_ref<std::uintptr_t> ref(
+                Common::atomic_ref<std::uintptr_t> ref(
                     *reinterpret_cast<std::uintptr_t*>(&renderer->selection));
                 std::uintptr_t expected = selection_value;
                 if (ref.compare_exchange_weak(expected, kBusy, std::memory_order_acq_rel)) {
@@ -2873,7 +2874,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontFile(OrbisFontLib library, const char* guest_pat
     for (;;) {
         const u32 lw = *ctx_lock_word;
         if (static_cast<s32>(lw) >= 0) {
-            std::atomic_ref<u32> ref(*ctx_lock_word);
+            Common::atomic_ref<u32> ref(*ctx_lock_word);
             u32 expected = lw;
             if (ref.compare_exchange_weak(expected, lw | 0x80000000u, std::memory_order_acq_rel)) {
                 break;
@@ -3162,7 +3163,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontFile(OrbisFontLib library, const char* guest_pat
         for (;;) {
             list_ptr = *list_lock;
             if (list_ptr != reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max())) {
-                std::atomic_ref<void*> ref(*list_lock);
+                Common::atomic_ref<void*> ref(*list_lock);
                 void* expected = list_ptr;
                 if (ref.compare_exchange_weak(
                         expected,
@@ -3429,7 +3430,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontInstance(OrbisFontHandle fontHandle, OrbisFontHa
             for (;;) {
                 const u32 lw = *lock_word_ptr;
                 if (static_cast<s32>(lw) >= 0) {
-                    std::atomic_ref<u32> ref(*lock_word_ptr);
+                    Common::atomic_ref<u32> ref(*lock_word_ptr);
                     u32 expected = lw;
                     if (ref.compare_exchange_weak(expected, lw | 0x80000000u,
                                                   std::memory_order_acq_rel)) {
@@ -3485,7 +3486,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontInstance(OrbisFontHandle fontHandle, OrbisFontHa
                 for (;;) {
                     const u32 lw = *lock_word_ptr;
                     if (static_cast<s32>(lw) >= 0) {
-                        std::atomic_ref<u32> ref(*lock_word_ptr);
+                        Common::atomic_ref<u32> ref(*lock_word_ptr);
                         u32 expected = lw;
                         if (ref.compare_exchange_weak(expected, lw | 0x80000000u,
                                                       std::memory_order_acq_rel)) {
@@ -3534,7 +3535,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontInstance(OrbisFontHandle fontHandle, OrbisFontHa
         for (;;) {
             list_ptr = list_lock ? *list_lock : nullptr;
             if (list_ptr != reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max())) {
-                std::atomic_ref<void*> ref(*list_lock);
+                Common::atomic_ref<void*> ref(*list_lock);
                 void* expected = list_ptr;
                 if (ref.compare_exchange_weak(
                         expected,
@@ -3754,7 +3755,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontMemory(OrbisFontLib library, const void* fontAdd
     for (;;) {
         const u32 lw = *ctx_lock_word;
         if (static_cast<s32>(lw) >= 0) {
-            std::atomic_ref<u32> ref(*ctx_lock_word);
+            Common::atomic_ref<u32> ref(*ctx_lock_word);
             u32 expected = lw;
             if (ref.compare_exchange_weak(expected, lw | 0x80000000u, std::memory_order_acq_rel)) {
                 break;
@@ -3825,7 +3826,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontMemory(OrbisFontLib library, const void* fontAdd
     for (;;) {
         entry_prev = *entry_lock_word;
         if (static_cast<s32>(entry_prev) >= 0) {
-            std::atomic_ref<u32> ref(*entry_lock_word);
+            Common::atomic_ref<u32> ref(*entry_lock_word);
             u32 expected = entry_prev;
             const u32 desired = entry_prev | 0x80000000u;
             if (ref.compare_exchange_weak(expected, desired, std::memory_order_acq_rel)) {
@@ -3969,7 +3970,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontMemory(OrbisFontLib library, const void* fontAdd
         for (;;) {
             list_ptr = *list_lock;
             if (list_ptr != reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max())) {
-                std::atomic_ref<void*> ref(*list_lock);
+                Common::atomic_ref<void*> ref(*list_lock);
                 void* expected = list_ptr;
                 if (ref.compare_exchange_weak(
                         expected,
@@ -4627,7 +4628,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontSet(OrbisFontLib library, u32 fontSetType, u32 o
                 for (;;) {
                     const u32 lw = *ctx_lock_word;
                     if (static_cast<s32>(lw) >= 0) {
-                        std::atomic_ref<u32> ref(*ctx_lock_word);
+                        Common::atomic_ref<u32> ref(*ctx_lock_word);
                         u32 expected = lw;
                         if (ref.compare_exchange_weak(expected, lw | 0x80000000u,
                                                       std::memory_order_acq_rel)) {
@@ -4951,7 +4952,7 @@ s32 PS4_SYSV_ABI sceFontOpenFontSet(OrbisFontLib library, u32 fontSetType, u32 o
                 list_ptr = *list_lock;
                 if (list_ptr !=
                     reinterpret_cast<void*>(std::numeric_limits<std::uintptr_t>::max())) {
-                    std::atomic_ref<void*> ref(*list_lock);
+                    Common::atomic_ref<void*> ref(*list_lock);
                     void* expected = list_ptr;
                     if (ref.compare_exchange_weak(
                             expected,

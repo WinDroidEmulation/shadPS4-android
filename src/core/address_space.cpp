@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <map>
+#if defined(__ANDROID__) && __ANDROID_API__ < 30
+#include <sys/syscall.h>
+#endif
 #include <fmt/format.h>
 #include "common/alignment.h"
 #include "common/arch.h"
@@ -717,7 +720,13 @@ struct AddressSpace::Impl {
         // so please, do not, add MFD_* whatever unless you ifdef it away (must be 0 for FBSD)
         // using sized pages as well causes incessant vm_reclaim calls in kernel, do not use on FBSD
         // under any circumstances.
+#if defined(__ANDROID__) && __ANDROID_API__ < 30
+        // bionic only exposes the memfd_create wrapper from API 30, but the
+        // underlying syscall has existed since kernel 3.17.
+        backing_fd = static_cast<int>(syscall(SYS_memfd_create, "BackingDmem", 0));
+#else
         backing_fd = memfd_create("BackingDmem", 0);
+#endif
         if (backing_fd < 0) {
             LOG_CRITICAL(Kernel_Vmm, "memfd_create failed: {}", strerror(errno));
             throw std::bad_alloc{};

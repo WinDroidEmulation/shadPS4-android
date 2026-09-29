@@ -96,6 +96,32 @@ Ucontext::Ucontext(siginfo_t const* inf, ucontext_t* raw_context) {
     uc_mcontext.mc_rip = regs[REG_RIP];
     uc_mcontext.mc_addr = reinterpret_cast<uint64_t>(inf->si_addr);
 #endif
+#elif defined(ARCH_ARM64)
+    // Guest code is x86_64 and cannot execute natively on AArch64 hosts, so a
+    // semantically meaningful conversion is not possible yet. Project the
+    // AArch64 host registers onto the guest slots (pc/sp mapped by role) so
+    // the signal plumbing keeps compiling.
+    const auto& mc = raw_context->uc_mcontext;
+    uc_mcontext.mc_rax = mc.regs[0];
+    uc_mcontext.mc_rcx = mc.regs[1];
+    uc_mcontext.mc_rdx = mc.regs[2];
+    uc_mcontext.mc_rbx = mc.regs[3];
+    uc_mcontext.mc_rdi = mc.regs[4];
+    uc_mcontext.mc_rsi = mc.regs[5];
+    uc_mcontext.mc_rbp = mc.regs[6];
+    uc_mcontext.mc_rsp = mc.sp;
+    uc_mcontext.mc_r8 = mc.regs[8];
+    uc_mcontext.mc_r9 = mc.regs[9];
+    uc_mcontext.mc_r10 = mc.regs[10];
+    uc_mcontext.mc_r11 = mc.regs[11];
+    uc_mcontext.mc_r12 = mc.regs[12];
+    uc_mcontext.mc_r13 = mc.regs[13];
+    uc_mcontext.mc_r14 = mc.regs[14];
+    uc_mcontext.mc_r15 = mc.regs[15];
+    uc_mcontext.mc_fs = 0;
+    uc_mcontext.mc_gs = 0;
+    uc_mcontext.mc_rip = mc.pc;
+    uc_mcontext.mc_addr = reinterpret_cast<uint64_t>(inf->si_addr);
 #else
 #error "ucontext_t conversion not implemented for current architecture."
 #endif
@@ -219,6 +245,27 @@ void Ucontext::SyncHostFromGuest() {
     // regs[REG_CSGSFS] |= (greg_t{uc_mcontext.mc_gs} << 16);
     regs[REG_RIP] = uc_mcontext.mc_rip;
 #endif
+#elif defined(ARCH_ARM64)
+    // See the Ucontext constructor comment above: this inverse mapping only
+    // keeps the signal plumbing compiling on AArch64 hosts.
+    auto& mc = host_context->uc_mcontext;
+    mc.regs[0] = uc_mcontext.mc_rax;
+    mc.regs[1] = uc_mcontext.mc_rcx;
+    mc.regs[2] = uc_mcontext.mc_rdx;
+    mc.regs[3] = uc_mcontext.mc_rbx;
+    mc.regs[4] = uc_mcontext.mc_rdi;
+    mc.regs[5] = uc_mcontext.mc_rsi;
+    mc.regs[6] = uc_mcontext.mc_rbp;
+    mc.sp = uc_mcontext.mc_rsp;
+    mc.regs[8] = uc_mcontext.mc_r8;
+    mc.regs[9] = uc_mcontext.mc_r9;
+    mc.regs[10] = uc_mcontext.mc_r10;
+    mc.regs[11] = uc_mcontext.mc_r11;
+    mc.regs[12] = uc_mcontext.mc_r12;
+    mc.regs[13] = uc_mcontext.mc_r13;
+    mc.regs[14] = uc_mcontext.mc_r14;
+    mc.regs[15] = uc_mcontext.mc_r15;
+    mc.pc = uc_mcontext.mc_rip;
 #else
 #error "ucontext_t conversion not implemented for current architecture."
 #endif

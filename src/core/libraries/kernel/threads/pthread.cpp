@@ -692,7 +692,7 @@ void InterruptPthreadForCancellation(Pthread* thread) noexcept {
         LOG_ERROR(Lib_Kernel, "Failed to deliver pthread cancellation APC: {:#x}", result);
     }
 #else
-    const auto native_thread = reinterpret_cast<pthread_t>(thread->native_thr->GetHandle());
+    const auto native_thread = static_cast<pthread_t>(thread->native_thr->GetHandle());
     const int result = pthread_kill(native_thread, HostPthreadCancelSignal());
     if (result != 0) {
         LOG_ERROR(Lib_Kernel, "Failed to deliver pthread cancellation signal: {}", result);
@@ -960,7 +960,7 @@ void Pthread::WakeForSignal() {
                                  ExceptionHandler, nullptr, nullptr, nullptr);
     ASSERT(res == 0);
 #else
-    pthread_kill(reinterpret_cast<pthread_t>(native_thr->GetHandle()), SIGUSR1);
+    pthread_kill(static_cast<pthread_t>(native_thr->GetHandle()), SIGUSR1);
 #endif
 }
 
