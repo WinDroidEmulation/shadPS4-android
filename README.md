@@ -1,232 +1,108 @@
-<!--
-SPDX-FileCopyrightText: 2026 shadPS4 Emulator Project
-SPDX-License-Identifier: GPL-2.0-or-later
--->
+# shadPS4-android Actions 构建修复（完整版）
 
-<h1 align="center">
-  <br>
-  <a href="https://shadps4.net/"><img src="https://github.com/shadps4-emu/shadPS4/blob/main/.github/shadps4.png" width="220"></a>
-  <br>
-  <b>shadPS4</b>
-  <br>
-</h1>
+## 修复包含两次提交的所有修改
 
-<h1 align="center">
- <a href="https://discord.gg/bFJxfftGW6">
-        <img src="https://img.shields.io/discord/1080089157554155590?color=5865F2&label=shadPS4%20Discord&logo=Discord&logoColor=white" width="275">
- <a href="https://github.com/shadps4-emu/shadPS4/releases/latest">
-        <img src="https://img.shields.io/github/downloads/shadps4-emu/shadPS4/total.svg" width="140">
- <a href="https://shadps4.net/">
-        <img src="https://img.shields.io/badge/shadPS4-website-8A2BE2" width="150">
- <a href="https://x.com/shadps4">
-        <img src="https://img.shields.io/badge/-Join%20us-black?logo=X&logoColor=white" width="100">
- <a href="https://github.com/shadps4-emu/shadPS4/stargazers">
-        <img src="https://img.shields.io/github/stars/shadps4-emu/shadPS4" width="120">
-</h1>
+本压缩包只包含 **5 个被修改的源文件** + 1 个 .patch + 1 个 README，目录结构与原仓库保持一致，可以直接覆盖到你的本地仓库根目录（或在已 clone 的仓库上 `git apply`）。
 
-|               Bloodborne by From Software                   |                     Hatsune Miku Project DIVA Future Tone by SEGA                         |
-| :-----------------------------------------------------------: | :--------------------------------------------------------------------------------------------: |
-| ![Bloodborne screenshot](./documents/Screenshots/1.png) | ![Project DIVA screenshot](./documents/Screenshots/2.png) |
+## 修改文件清单
 
-|                  Yakuza 0 by SEGA                     |                 DRIVECLUB™ by Evolution Studios                    |
-| :------------------------------------------------------------------------: | :------------------------------------------------------------------: |
-| ![Yakuza screenshot](./documents/Screenshots/3.png) | ![DRIVECLUB screenshot](./documents/Screenshots/4.png) |
-
-# General information
-
-**shadPS4** is an early **PlayStation 4** emulator for **Windows**, **Linux** and **macOS** written in C++.
-
-> [!IMPORTANT]
-> This is the emulator core, which does not include a GUI. If you just want to use the emulator as an end user, download the [**QtLauncher**](https://github.com/shadps4-emu/shadps4-qtlauncher/releases) instead.
-
-If you encounter problems or have doubts, do not hesitate to look at the [**Quickstart**](https://github.com/shadps4-emu/shadPS4/wiki/I.-Quick-start-%5BUsers%5D).\
-To verify that a game works, you can look at [**shadPS4 Game Compatibility**](https://github.com/shadps4-compatibility/shadps4-game-compatibility).\
-To discuss shadPS4 development, suggest ideas or to ask for help, join our [**Discord server**](https://discord.gg/bFJxfftGW6).\
-To get the latest news, go to our [**X (Twitter)**](https://x.com/shadps4) or our [**website**](https://shadps4.net/).\
-You can donate to the project via our [**Kofi page**](https://ko-fi.com/shadps4).
-
-# Status
-
-> [!IMPORTANT]
-> shadPS4 is early in development, don't expect a flawless experience.
-
-Currently, the emulator can successfully run games like [**Bloodborne**](https://www.youtube.com/watch?v=5sZgWyVflFM), [**Dark Souls Remastered**](https://www.youtube.com/watch?v=-3PA-Xwszts), [**Red Dead Redemption**](https://www.youtube.com/watch?v=Al7yz_5nLag), and many other games.
-
-# Why
-
-This project began for fun. Given our limited free time, it may take some time before shadPS4 can run more complex games, but we're committed to making small, regular updates.
-
-# Building
-
-## Docker
-
-For building shadPS4 in a containerized environment using Docker and VSCode, check the instructions here:  
-[**Docker Build Instructions**](https://github.com/shadps4-emu/shadPS4/blob/main/documents/building-docker.md)
-
-## Windows
-
-Check the build instructions for [**Windows**](https://github.com/shadps4-emu/shadPS4/blob/main/documents/building-windows.md).
-
-## Linux
-
-Check the build instructions for [**Linux**](https://github.com/shadps4-emu/shadPS4/blob/main/documents/building-linux.md).
-
-## macOS
-
-Check the build instructions for [**macOS**](https://github.com/shadps4-emu/shadPS4/blob/main/documents/building-macos.md).
-
-> [!IMPORTANT]
-> macOS users need at least macOS 26.0 to run shadPS4. Intel Macs are not supported.
-
-## Android
-
-This fork contains an engineering port of the emulator to Android (arm64-v8a, minSdk 29).
-It builds and installs an APK with the SDL3 + Dear ImGui Big Picture frontend, and is the
-base for the upcoming ARM64 CPU backend.
-
-> [!IMPORTANT]
-> Games cannot be booted yet: PS4 titles ship x86-64 code and the x86-64 to ARM64
-> translation backend is still under development. See
-> [**ANDROID_PORT.md**](ANDROID_PORT.md) for the capability matrix and roadmap.
-
-Quick start (SDK with NDK 27 installed):
-
-```sh
-bash android/build_native.sh Release   # host protoc + FFmpeg + emulator -> jniLibs
-cd android && ./gradlew assembleRelease
+```
+shadPS4-android-fix/
+├── .github/
+│   └── workflows/
+│       └── android-build.yml          # GitHub Actions 升级到 v5，host-protoc 缓存 key 提升 v1→v2
+├── src/
+│   ├── imgui/
+│   │   └── renderer/
+│   │       └── CMakeLists.txt         # 交叉编译时使用 HOST_FONT_EMBED_EXECUTABLE
+│   └── video_core/
+│       └── host_shaders/
+│           └── CMakeLists.txt          # 交叉编译时使用 HOST_GLSLANG_EXECUTABLE
+├── externals/
+│   ├── discord-rpc/
+│   │   └── src/
+│   │       └── CMakeLists.txt         # 修复 -lpthread 找不到（关键修复，本轮新加）
+│   └── zstd/
+│       └── build/
+│           └── cmake/
+│               └── CMakeModules/
+│                   └── ZstdDependencies.cmake  # Android 下不传 -lpthread（防御性修复）
+├── shadPS4-android-fix.patch          # 一次性应用所有修复的 git patch
+└── README.md                          # 本说明文件
 ```
 
-Or use the manually-triggered **Android Build** GitHub Actions workflow, which
-produces a signed APK when the `ANDROID_KEYSTORE_BASE64`-family secrets are set.
+## 问题与修复对照
 
-# Usage examples
+### 第一次：exit code 126（Run #6，commit 7368e129 之后）
+**症状**：`Process completed with exit code 126`，在 "Build native libraries" 步骤。
+**根因**：交叉编译时，主 CMake 工程里的 `add_custom_command` 在 x86_64 宿主机上尝试运行 ARM64 二进制：
+- `src/imgui/renderer/CMakeLists.txt` 的 `Dear_ImGui_FontEmbed` target 被编译为 ARM64，然后被宿主机执行 → ENOEXEC → 126。
+- `src/video_core/host_shaders/CMakeLists.txt` 在交叉编译时既找不到 `glslang-standalone` target（glslang 子项目里的 `if (IOS OR ANDROID) set(ENABLE_GLSLANG_BINARIES OFF)` 关掉了），也没有消费 `7368e129` 新增的 `HOST_FONT_EMBED_EXECUTABLE` / `HOST_GLSLANG_EXECUTABLE`。
 
-> [!IMPORTANT]
-> For a user-friendly GUI, download the [**QtLauncher**](https://github.com/shadps4-emu/shadps4-qtlauncher/releases).
+**修复**：
+- `src/imgui/renderer/CMakeLists.txt`：当 `CMAKE_CROSSCOMPILING AND HOST_FONT_EMBED_EXECUTABLE` 时，直接用宿主机可执行文件，跳过构建 ARM64 版 Dear_ImGui_FontEmbed。
+- `src/video_core/host_shaders/CMakeLists.txt`：当 `CMAKE_CROSSCOMPILING AND HOST_GLSLANG_EXECUTABLE` 时，优先用宿主机路径。
+- `.github/workflows/android-build.yml`：actions 全部升级到 v5，消除 Node.js 20 deprecation 警告；host-protoc 缓存 key `v1` → `v2`，丢弃在加入新宿主工具前生成的陈旧缓存。
 
-To get the list of all available commands and also a more detailed description of what each command does, please refer to the `--help` flag's output.
+### 第二次：ld.lld: error: unable to find library -lpthread（Run #7，commit ca2728d9 之后）
+**症状**：上述问题修复后构建能继续 25 分钟，但在最终链接阶段报：
+```
+ld.lld: error: unable to find library -lpthread
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+ninja: build stopped: subcommand failed
+```
+**根因**：Android 自 API 21 起 pthread 已合并到 libc，NDK sysroot 不再提供 `libpthread.a`。任何显式 `-lpthread` 都会让链接器找不到。仓库里有 2 处直接产生 `-lpthread`：
 
-Below is a list of commonly used command patterns:
-```sh
-shadPS4 CUSA00001 # Searches for a game folder called CUSA00001 in the list of game install folders, and boots it.
-shadPS4 --fullscreen true --config-clean CUSA00001    # the game argument is always the last one,
-shadPS4 -g CUSA00001 --fullscreen true --config-clean # ...unless manually specified otherwise.
-shadPS4 /path/to/game.elf # Boots a PS4 ELF file directly. Useful if you want to boot an executable that is not named eboot.bin.
-shadPS4 CUSA00001 -- -flag1 -flag2 # Passes '-flag1' and '-flag2' to the game executable in argv.
+1. **`externals/discord-rpc/src/CMakeLists.txt:74`**
+   `target_link_libraries(discord-rpc PUBLIC pthread)` —— CMake 把 `pthread` 当库名翻译成 `-lpthread`，discord-rpc 是 PUBLIC 链接，所以最终 `libmain.so` 也会带 `-lpthread`，链接失败。
+
+2. **`externals/zstd/build/cmake/CMakeModules/ZstdDependencies.cmake`**
+   把 `CMAKE_THREAD_LIBS_INIT` 直接拷给 `THREADS_LIBS`。我们在 `externals/CMakeLists.txt` 里已经把 `ZSTD_MULTITHREAD_SUPPORT` 关掉了，所以理论上不会触发，但作为防御性修复一并修掉。
+
+**修复**：
+- `externals/discord-rpc/src/CMakeLists.txt`：把 `target_link_libraries(discord-rpc PUBLIC pthread)` 改成 `find_package(Threads REQUIRED) + target_link_libraries(discord-rpc PUBLIC Threads::Threads)`。CMake 的 `FindThreads` 在 Android 上会检测到 pthread-in-libc，`Threads::Threads` 的 `INTERFACE_LINK_LIBRARIES` 为空，因此不会产生 `-lpthread`；Linux/macOS 上仍保持原有 pthread 链接。
+- `externals/zstd/build/cmake/CMakeModules/ZstdDependencies.cmake`：在 Android 下显式把 `THREADS_LIBS` 清空。
+
+### 其他清理
+- 删除 `fix.patch`（`ca2728d9` 提交误带入的 1.3 MB 的陈旧 diff，对构建无影响但是冗余）。
+
+## 验证
+
+### 第一步修复验证
+在本地用 GNU 编译器跑了 `android/cmake` 子项目的宿主工具构建，三个 target 都成功产出：
+- `protoc`
+- `Dear_ImGui_FontEmbed`
+- `glslang-standalone`（输出路径 `<build>/host-tools/glslang`，`<build>/host-tools/glslangValidator` 为符号链接）
+
+### 第二步修复验证
+1. CMake `FindThreads.cmake` 源码确认：在 Android 交叉编译环境下，`check_c_source_compiles("${PTHREAD_C_CXX_TEST_SOURCE}" CMAKE_HAVE_LIBC_PTHREAD)` 会通过（libc 里就有 pthread_create 等），因此 `CMAKE_THREAD_LIBS_INIT=""`，`Threads::Threads` 是空 `INTERFACE_LINK_LIBRARIES`。
+2. 代码库全文搜索 `target_link_libraries.*pthread\b` / `-lpthread` 确认：除本修复的两处外，其他出现都在 SDL3 的 `CheckPTHREAD` 宏（已经有 `if(ANDROID OR SDL_PTHREADS_PRIVATE)` 守护）或各种 example/test 子目录里（不会被主构建 include）。
+
+## 如何使用
+
+### 方式一：直接覆盖到你的本地仓库
+```
+unzip shadPS4-android-fix.zip
+# 把里面的 .github/、src/、externals/ 三棵子树复制到你已 clone 的 shadPS4-android 仓库根目录覆盖
+cd /path/to/your/shadPS4-android
+cp -r /path/to/unpacked/shadPS4-android-fix/.github .
+cp -r /path/to/unpacked/shadPS4-android-fix/src .
+cp -r /path/to/unpacked/shadPS4-android-fix/externals .
+git add -A
+git commit -m "Apply Android build fix (exit code 126 + -lpthread not found)"
+git push
 ```
 
-# Debugging and reporting issues
+### 方式二：在已 clone 的仓库上 git apply
+```
+cd /path/to/your/shadPS4-android
+git apply /path/to/shadPS4-android-fix.patch
+git commit -am "Fix Android build: host tools in cross-compile + drop -lpthread"
+git push
+```
 
-For more information on how to test, debug and report issues with the emulator or games, read the [**Debugging documentation**](https://github.com/shadps4-emu/shadPS4/blob/main/documents/Debugging/Debugging.md).
+## 后续建议
 
-# Keyboard and Mouse Mappings
-
-> [!NOTE]
-> Some keyboards may also require you to hold the Fn key to use the F\* keys. Mac users should use the Command key instead of Control, and need to use Command+F11 for full screen to avoid conflicting with system key bindings.
-
-| Button | Function |
-|-------------|-------------|
-F10 | FPS Counter
-Ctrl+F10 | Video Debug Info
-F11 | Fullscreen
-F12 | Trigger RenderDoc Capture (or game-only screenshot if RenderDoc is unavailable)
-Alt+F12 | Capture screenshot including HUD/dialog overlays
-
-> [!NOTE]
-> Xbox and DualShock controllers work out of the box.
-
-| Controller button | Keyboard equivalent |
-|-------------|-------------|
-LEFT AXIS UP | W |
-LEFT AXIS DOWN | S |
-LEFT AXIS LEFT | A |
-LEFT AXIS RIGHT | D |
-RIGHT AXIS UP | I |
-RIGHT AXIS DOWN | K |
-RIGHT AXIS LEFT | J |
-RIGHT AXIS RIGHT | L |
-TRIANGLE | Numpad 8 or C |
-CIRCLE | Numpad 6 or B |
-CROSS | Numpad 2 or N |
-SQUARE | Numpad 4 or V |
-PAD UP | UP |
-PAD DOWN | DOWN |
-PAD LEFT | LEFT |
-PAD RIGHT | RIGHT |
-OPTIONS | RETURN |
-BACK BUTTON / TOUCH PAD | SPACE |
-L1 | Q |
-R1 | U |
-L2 | E |
-R2 | O |
-L3 | X |
-R3 | M |
-
-Keyboard and mouse inputs can be customized in the settings menu by clicking the Controller button, and further details and help on controls are  also found there. Custom bindings are saved per-game. Inputs support up to three keys per binding, mouse buttons, mouse movement mapped to joystick input, and more.
-
-
-# Firmware files
-
-shadPS4 can load some PlayStation 4 firmware files.
-The following firmware modules are supported and must be placed in shadPS4's `sys_modules` folder.
-
-<div align="center">
-
-| Modules                        | Modules                        | Modules                        | Modules                        |
-|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
-| libSceAt9Enc.sprx              | libSceAudiodec.sprx            | libSceAudiodecCpu.sprx         | libSceAudiodecCpuDdp.sprx      |
-| libSceAudiodecCpuDtsHdLbr.sprx | libSceAudiodecCpuHevag.sprx    | libSceAudiodecCpuM4aac.sprx    | libSceAvPlayer.sprx            |
-| libSceAvPlayerStreaming.sprx   | libSceBeisobmf.sprx            | libSceBemp2sys.sprx            | libSceCesCs.sprx               |
-| libSceFont.sprx                | libSceFontFt.sprx              | libSceFreeTypeOl.sprx          | libSceFreeTypeOptOl.sprx       |
-| libSceFreeTypeOt.sprx          | libSceJpegDec.sprx             | libSceJpegEnc.sprx             | libSceJson.sprx                |
-| libSceJson2.sprx               | libSceLibcInternal.sprx        | libSceNgs2.sprx                | libScePngEnc.sprx              |
-| libScePsmKitSystem.sprx        | libSceRtc.sprx                 | libSceRudp.sprx                | libSceSystemGesture.sprx       |
-| libSceUlt.sprx                 | libSceWkFontConfig.sprx        | libSceXml.sprx                 | libSceDepth.sprx               |
-| libScePadTracker.sprx          | libSceMoveTracker.sprx         |
-</div>
-
-> [!Caution]
-> The above modules are required to run the games properly and must be dumped from your legally owned PlayStation 4 console.
-
-
-
-# Main team
-
-- [**georgemoralis**](https://github.com/georgemoralis)
-- [**psucien**](https://github.com/psucien)
-- [**viniciuslrangel**](https://github.com/viniciuslrangel)
-- [**roamic**](https://github.com/roamic)
-- [**squidbus**](https://github.com/squidbus)
-- [**frodo**](https://github.com/baggins183)
-- [**Stephen Miller**](https://github.com/StevenMiller123)
-- [**kalaposfos13**](https://github.com/kalaposfos13)
-
-Logo is done by [**Xphalnos**](https://github.com/Xphalnos)
-
-<a href="https://github.com/shadps4-emu/shadPS4/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=shadps4-emu/shadPS4&max=24">
-</a>
-
-# Contributing
-
-If you want to contribute, please read the [**CONTRIBUTING.md**](https://github.com/shadps4-emu/shadPS4/blob/main/CONTRIBUTING.md) file.\
-Open a PR and we'll check it :)
-
-
-# Special Thanks
-
-A few noteworthy teams/projects who've helped us along the way are:
-
-- [**Panda3DS**](https://github.com/wheremyfoodat/Panda3DS): A multiplatform 3DS emulator from our co-author wheremyfoodat. They have been incredibly helpful in understanding and solving problems that came up from natively executing the x64 code of PS4 binaries
-
-- [**fpPS4**](https://github.com/red-prig/fpPS4): The fpPS4 team has assisted massively with understanding some of the more complex parts of the PS4 operating system and libraries, by helping with reverse engineering work and research.
-
-- **yuzu**: Our shader compiler has been designed with yuzu's Hades compiler as a blueprint. This allowed us to focus on the challenges of emulating a modern AMD GPU while having a high-quality optimizing shader compiler implementation as a base.
-
-- [**felix86**](https://github.com/OFFTKP/felix86): A new x86-64 → RISC-V Linux userspace emulator
-
-- [**emudev.org**](https://emudev.org/): A network of people interested in the documentation, emulation, simulation and re-implementation of hardware near extinction . Belongs to my friend skmp and me (shadow) also a member of it
-
-# License
-
-- [**GPL-2.0 license**](https://github.com/shadps4-emu/shadPS4/blob/main/LICENSE)
+1. 推到 GitHub 后在 Actions 页面手动触发一次 "Android Build" workflow（Release）验证。
+2. 如果还有其他类型的报错，把 Actions 失败页面的 step 标题 + 关键错误信息发给我，继续迭代。
+3. 把所有 `pthread` 类的 `target_link_libraries(... pthread)` 都换成 `Threads::Threads` 是个长期方向，可以分批改；本次只修了主构建必然用到的 `discord-rpc`。

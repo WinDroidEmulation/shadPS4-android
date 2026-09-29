@@ -21,9 +21,18 @@ if(ZSTD_MULTITHREAD_SUPPORT AND UNIX)
         set(THREADS_PREFER_PTHREAD_FLAG ON)
         find_package(Threads REQUIRED)
     endif()
-    
+
     if(CMAKE_USE_PTHREADS_INIT)
-        set(THREADS_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+        # Android port: Android's libc provides pthreads natively and the NDK
+        # sysroot has no libpthread.a. CMake's FindThreads on Android detects
+        # pthread-in-libc and leaves CMAKE_THREAD_LIBS_INIT empty, so this
+        # keeps THREADS_LIBS empty on Android while preserving -lpthread/-pthread
+        # elsewhere.
+        if(ANDROID)
+            set(THREADS_LIBS "")
+        else()
+            set(THREADS_LIBS "${CMAKE_THREAD_LIBS_INIT}")
+        endif()
     else()
         message(SEND_ERROR "ZSTD currently does not support thread libraries other than pthreads")
     endif()

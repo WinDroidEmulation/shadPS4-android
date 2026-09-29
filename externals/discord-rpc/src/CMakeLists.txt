@@ -71,7 +71,16 @@ if(UNIX)
     endif(APPLE)
 
     add_library(discord-rpc ${BASE_RPC_SRC})
-    target_link_libraries(discord-rpc PUBLIC pthread)
+
+    # Android port: Android's libc provides pthreads natively, and the NDK
+    # sysroot has no libpthread.a. Linking `pthread` by name produces
+    # `-lpthread`, which ld.lld then rejects with
+    # "unable to find library -lpthread". Use the CMake Threads::Threads
+    # imported target instead: FindThreads detects pthread-in-libc on Android
+    # and emits no extra link flag, while preserving the explicit pthread
+    # link on Linux/macOS.
+    find_package(Threads REQUIRED)
+    target_link_libraries(discord-rpc PUBLIC Threads::Threads)
 
     if (APPLE)
         target_link_libraries(discord-rpc PRIVATE "-framework AppKit")
