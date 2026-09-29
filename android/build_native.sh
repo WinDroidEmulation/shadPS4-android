@@ -324,6 +324,15 @@ run_cmake() {
     # "experimental" gate even though the implementation (and the prebuilt
     # libc++ runtime) is complete. Re-enable it for the emulator sources,
     # which rely on cooperative cancellation.
+    #
+    # CMAKE_LIBRARY_OUTPUT_DIRECTORY forces all SHARED targets produced by
+    # sub-projects (e.g. SDL3-shared -> libSDL3.so from externals/sdl3/) to
+    # land in a single well-known directory. Without this, SDL3 (which is
+    # added via add_subdirectory(sdl3) and doesn't set its own output dir)
+    # drops libSDL3.so at ${BUILD_DIR}/cmake-out/externals/sdl3/libSDL3.so,
+    # while libmain.so lands at the top-level ${BUILD_DIR}/cmake-out/. The
+    # post-build check and jniLibs staging below both expect them side by
+    # side, so flatten the layout here.
     cmake -G Ninja \
         -S "${ROOT_DIR}" \
         -B "${BUILD_DIR}/cmake-out" \
@@ -331,6 +340,7 @@ run_cmake() {
         -DANDROID_ABI="${SHADPS4_ABI}" \
         -DANDROID_PLATFORM="${SHADPS4_PLATFORM}" \
         -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+        -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="${BUILD_DIR}/cmake-out" \
         -DCMAKE_CXX_FLAGS="-D_LIBCPP_ENABLE_EXPERIMENTAL" \
         -DPROTOC_HOST_EXECUTABLE="${PROTOC_BIN}" \
         -DHOST_FONT_EMBED_EXECUTABLE="${BUILD_DIR}/host-protoc/Dear_ImGui_FontEmbed" \
@@ -341,7 +351,25 @@ run_cmake() {
     cmake --build "${BUILD_DIR}/cmake-out" -j"${JOBS}"
 
     [[ -f "${BUILD_DIR}/cmake-out/libmain.so" ]] || die "libmain.so was not produced."
-    [[ -f "${BUILD_DIR}/cmake-out/libSDL3.so" ]] || die "libSDL3.so was not produced."
+    # libSDL3.so used to be at externals/sdl3/ before we set
+    # CMAKE_LIBRARY_OUTPUT_DIRECTORY above; keep a fallback for any stale
+    # build dir that pre-dates the flag, and to give a clearer error when
+    # both paths are empty.
+    local sdl3_so=""
+    for cand in \
+        "${BUILD_DIR}/cmake-out/libSDL3.so" \
+        "${BUILD_DIR}/cmake-out/externals/sdl3/libSDL3.so"; do
+        if [[ -f "${cand}" ]]; then
+            sdl3_so="${cand}"
+            break
+        fi
+    done
+    [[ -n "${sdl3_so}" ]] || die "libSDL3.so was not produced (looked in cmake-out/ and cmake-out/externals/sdl3/)."
+    # If SDL3 ended up in the subproject dir, move it next to libmain.so so
+    # the jniLibs staging step below can use the same path.
+    if [[ "${sdl3_so}" != "${BUILD_DIR}/cmake-out/libSDL3.so" ]]; then
+        cp -f "${sdl3_so}" "${BUILD_DIR}/cmake-out/libSDL3.so"
+    fi
     log "Native build OK: libmain.so + libSDL3.so"
 }
 
