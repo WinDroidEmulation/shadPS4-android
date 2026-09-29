@@ -212,6 +212,20 @@ build_ffmpeg() {
     # Trim the vcpkg-style feature set used by the desktop builds down to a
     # hermetic, fully-internal configuration: every bundled decoder stays on
     # (h264/hevc/aac/mp3 included), all external dependencies are off.
+    #
+    # --disable-asm is mandatory on Android/arm64:
+    # FFmpeg's NEON FFT asm (libavutil/aarch64/tx_float_neon.S) uses
+    # `adrp + add` to reference the global `ff_tx_tab_*_float` tables defined
+    # in tx_float.o. FFmpeg marks those tables with *default* visibility
+    # (no -fvisibility=hidden, no version-script export gate because we
+    # build a static lib). When ld.lld links libavutil.a into libmain.so,
+    # it rejects ADRP against a default-visibility cross-object symbol with
+    # "relocation R_AARCH64_ADR_PREL_PG_HI21 cannot be used against symbol
+    # 'ff_tx_tab_32_float'; recompile with -fPIC".
+    # The C fallback (tx_template.c compiled without asm) is plenty fast
+    # for shadPS4's media-decode workload; the NEON path is only a
+    # micro-optimization that's incompatible with the static-lib -> .so
+    # linking model.
     local common_flags=(
         --prefix="${FFMPEG_PREFIX}"
         --enable-cross-compile
@@ -229,6 +243,7 @@ build_ffmpeg() {
         --enable-static
         --disable-shared
         --enable-pic
+        --disable-asm
         --disable-programs
         --disable-doc
         --disable-avdevice
