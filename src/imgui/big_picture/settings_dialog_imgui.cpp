@@ -634,9 +634,14 @@ void SettingsWindow::DrawGameFolderManager() {
             }
             // Seed the dialog bookmarks with the common Android storage
             // roots so the user can jump between them with one tap.
+            // The bookmark API requires USE_BOOKMARK to be defined in
+            // ImGuiFileDialogConfig.h; if the project's vendored ImGuiFileDialog
+            // is built without that flag, the bookmark calls are simply skipped
+            // (we still benefit from the start_path fix below).
             static bool android_bookmarks_added = false;
             if (!android_bookmarks_added) {
                 android_bookmarks_added = true;
+#ifdef USE_BOOKMARK
                 for (const char* p : android_paths) {
                     if (std::filesystem::is_directory(p, ec)) {
                         // Use the last path segment as the bookmark name.
@@ -651,6 +656,7 @@ void SettingsWindow::DrawGameFolderManager() {
                         ImGuiFileDialog::Instance()->AddBookmark(name, p);
                     }
                 }
+#endif  // USE_BOOKMARK
             }
         }
 #endif

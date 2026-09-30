@@ -127,6 +127,12 @@
 //#define defaultSortOrderThumbnails true
 
 //#define USE_BOOKMARK
+// Android port: enable the bookmark sidebar so we can pre-populate it with
+// the common Android storage roots (/storage/emulated/0, /storage/emulated/0/
+// Games, etc.) and the user can jump between them with one tap instead of
+// having to navigate to /storage/emulated/0 manually each time.
+#define USE_BOOKMARK
+#define defaultBookmarkPaneWith 180.0f
 //#define bookmarkPaneWith 150.0f
 //#define IMGUI_TOGGLE_BUTTON ToggleButton
 //#define bookmarksButtonString "Bookmark"
