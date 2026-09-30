@@ -20,6 +20,7 @@ enum class Class {
     Core,              ///< LLE emulation core
     Core_Linker,       ///< The module linker
     Core_Devices,      ///< Devices emulation
+    Core_Cpu,          ///< x86-64 → ARM64 translation backend (interpreter/JIT)
     Config,            ///< Emulator configuration (including commandline)
     Debug,             ///< Debugging tools
     Kernel,            ///< The HLE implementation of the PS4 kernel.

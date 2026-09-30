@@ -10,6 +10,7 @@
 #include "common/sha1.h"
 #include "common/string_util.h"
 #include "core/aerolib/aerolib.h"
+#include "core/cpu/cpu_backend.h"
 #include "core/cpu_patches.h"
 #include "core/libraries/error_codes.h"
 #include "core/loader/dwarf.h"
@@ -101,17 +102,27 @@ Module::~Module() = default;
 
 s32 Module::Start(u64 args, const void* argp, void* param) {
     LOG_INFO(Core_Linker, "Module started : {}", name);
+    const VAddr addr = dynamic_info.init_virtual_addr + GetBaseAddress();
 #if defined(ARCH_ARM64)
-    // Android/ARM64 port: the foreign x86-64 entry point cannot be called
-    // directly on ARM64 (it would jump into PS4 game code that has no ARM64
-    // equivalent in this build). Return ORBIS_OK without jumping so the
-    // caller sees a "successful" module start; the actual game loop is
-    // driven from Emulator::Run via TouchOverlay::RunCompatibilityMode.
-    LOG_WARNING(Core_Linker,
-                "Skipping foreign x86-64 entry point for {} (ARM64 compatibility mode)", name);
+    // Android/ARM64 port: instead of jumping directly into the foreign
+    // x86-64 entry point, hand off to the CPU translation backend
+    // (interpreter for now, JIT later). The backend sets up an
+    // X64CpuState, executes guest instructions one at a time (or, when
+    // the JIT lands, block-by-block), and returns when the guest returns
+    // from its entry function. We treat the return value as the PS4
+    // module's exit code.
+    LOG_INFO(Core_Linker,
+              "Dispatching {} entry 0x{:016x} through CPU backend (ARM64)",
+              name, addr);
+    auto* backend = Core::Cpu::GetBackend();
+    if (!backend) {
+        LOG_CRITICAL(Core_Linker, "No CPU backend available; cannot start {}", name);
+        return ORBIS_OK;
+    }
+    Core::Cpu::GuestCallContext ctx{args, argp, param};
+    backend->Execute(addr, ctx);
     return ORBIS_OK;
 #else
-    const VAddr addr = dynamic_info.init_virtual_addr + GetBaseAddress();
     return reinterpret_cast<EntryFunc>(addr)(args, argp, param);
 #endif
 }

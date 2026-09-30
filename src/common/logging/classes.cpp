@@ -23,6 +23,8 @@ std::string_view NameOf(Class log_class) {
         return "Core.Linker";
     case Class::Core_Devices:
         return "Core.Devices";
+    case Class::Core_Cpu:
+        return "Core.Cpu";
     case Class::Config:
         return "Config";
     case Class::Debug:

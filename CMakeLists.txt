@@ -973,6 +973,26 @@ set(CORE src/core/aerolib/stubs.cpp
          src/core/user_manager.h
          src/core/user_settings.cpp
          src/core/user_settings.h
+         # x86-64 → ARM64 translation backend (Android port).
+         # cpu_backend.h + cpu_backend_manager.cpp hold the backend
+         # selection logic; x64_cpu_state.h is the per-thread register
+         # state shared by all backends. The interpreter lives under
+         # src/core/cpu/interpreter/; the ARM64 JIT (when wired up)
+         # will live under src/core/cpu/jit/. The NativeX64Backend is
+         # only used on x86 hosts — it's compiled unconditionally
+         # because the linker still needs the symbol.
+         src/core/cpu/cpu_backend.h
+         src/core/cpu/cpu_backend_manager.cpp
+         src/core/cpu/x64_cpu_state.h
+         src/core/cpu/interpreter/x64_interpreter_backend.h
+         src/core/cpu/interpreter/x64_interpreter_backend.cpp
+         src/core/cpu/interpreter/x64_operand_access.cpp
+         src/core/cpu/interpreter/x64_sse_handlers.cpp
+         src/core/cpu/interpreter/x64_shift_string_handlers.cpp
+         src/core/cpu/interpreter/x64_system_lock_handlers.cpp
+         src/core/cpu/interpreter/x64_hle_bridge.cpp
+         src/core/cpu/native/native_x64_backend.h
+         src/core/cpu/native/native_x64_backend.cpp
 )
 
 if (ARCHITECTURE STREQUAL "x86_64")
