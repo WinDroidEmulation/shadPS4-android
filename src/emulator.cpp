@@ -44,6 +44,7 @@
 #include "core/memory.h"
 #include "core/user_settings.h"
 #include "emulator.h"
+#include "imgui/touch_overlay.h"
 #include "video_core/cache_storage.h"
 #include "video_core/renderdoc.h"
 
@@ -282,20 +283,33 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
                    std::vector<std::string> const& env_vars, bool append_log) {
     Common::SetCurrentThreadName("shadPS4:Main");
 #if defined(ARCH_ARM64)
-    // Android/ARM64 port: PS4 titles ship x86-64 code that this build cannot
-    // execute yet (an x86-64 -> ARM64 translation backend is still required,
-    // see ANDROID_PORT.md section 6). Fail with a clear message instead of
-    // jumping into unmapped/foreign guest code.
-    LOG_CRITICAL(Loader,
-                 "Cannot start game on ARM64: PS4 executables are x86-64 and no "
-                 "CPU translation backend is available in this build.");
-    SDL_ShowSimpleMessageBox(
-        SDL_MESSAGEBOX_ERROR, "shadPS4",
-        "PS4 games cannot be started on this device yet.\n"
-        "ARM64 builds require an x86-64 translation backend that is still "
-        "under development (see ANDROID_PORT.md).",
-        nullptr);
-    return;
+    // Android/ARM64 port: instead of hard-failing the moment Run() is called
+    // (which is what the previous code did), let the loader proceed — mount
+    // the game's filesystem, parse param.sfo, populate ElfInfo, load the ELF
+    // segments into memory — and then divert just before the foreign x86-64
+    // entry-point jump. The user gets a "compatibility mode" UI with the game
+    // title + a working virtual gamepad overlay; when the x86-64 → ARM64
+    // interpreter backend lands (see ANDROID_PORT.md §6 for the roadmap), the
+    // same code path is reused and the overlay stays as the on-screen
+    // controller for actual game execution.
+    //
+    // We still bail out early here only when the file argument is missing so
+    // we don't waste time setting up the window for a non-existent game.
+    if (file.empty()) {
+        LOG_CRITICAL(Loader, "Emulator::Run called with an empty game path");
+        SDL_ShowSimpleMessageBox(
+            SDL_MESSAGEBOX_ERROR, "shadPS4",
+            "No game path was provided. Please select a game from the Big "
+            "Picture library first.",
+            nullptr);
+        return;
+    }
+    LOG_WARNING(Loader,
+                "ARM64 compatibility mode: PS4 executables are x86-64 and no "
+                "CPU translation backend is available in this build. The game "
+                "will be loaded into memory and a virtual gamepad overlay will "
+                "be shown, but guest code will NOT be executed. See "
+                "ANDROID_PORT.md §6 for the interpreter/JIT roadmap.");
 #endif
     if (waitForDebuggerBeforeRun) {
         Debugger::WaitForDebuggerAttach();
@@ -713,6 +727,28 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
         });
     }
 
+#if defined(ARCH_ARM64)
+    // Android/ARM64 compatibility mode: instead of jumping into the game's
+    // x86-64 entry point (which would crash on ARM64), open the touch overlay
+    // compatibility-mode UI and block until the user closes the window. The
+    // loader has already mounted the game's filesystem, parsed param.sfo,
+    // populated ElfInfo (so the title is in `game_info.title`), and mapped
+    // the ELF segments — those steps don't execute any guest code, so they
+    // are safe on ARM64.
+    {
+        auto& game_info_compat = Common::ElfInfo::Instance();
+        std::string compat_title{game_info_compat.Title()};
+        if (compat_title.empty()) {
+            compat_title = id.empty() ? "(unknown title)" : id;
+        }
+        LOG_INFO(Loader, "Entering ARM64 compatibility mode for title: '{}'", compat_title);
+        TouchOverlay::RunCompatibilityMode(Common::FS::PathToUTF8String(file), compat_title,
+                                           controllers);
+        // The compatibility-mode window has closed; the user is back at Big
+        // Picture. Skip the normal game-execution loop below.
+        std::quick_exit(0);
+    }
+#endif
     linker->Execute(args);
 
     window->InitTimers();

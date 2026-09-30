@@ -1231,6 +1231,8 @@ set(IMGUI src/imgui/imgui_config.h
           src/imgui/big_picture/imgui_impl_sdl3_big_picture.h
           src/imgui/big_picture/imgui_impl_sdlrenderer3.cpp
           src/imgui/big_picture/imgui_impl_sdlrenderer3.h
+          src/imgui/touch_overlay.cpp
+          src/imgui/touch_overlay.h
 )
 
 set(INPUT src/input/controller.cpp

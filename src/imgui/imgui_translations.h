@@ -126,6 +126,17 @@ const std::map<std::string, std::string> ChineseTraditionalMap = {
     {"Trophy Notification Duration", "獎盃通知持續時間"},
     {"Additional DMem Allocation", "額外 DMEM 分配"},
     {"Vblank Frequency", "Vblank 頻率"},
+    // Touch overlay / compatibility-mode UI
+    {"Compatibility mode — game loaded, but x86-64 → ARM64 "
+     "interpreter is still in development (see ANDROID_PORT.md §6).",
+     "相容模式 — 遊戲已載入，但 x86-64 → ARM64 解譯器仍在開發中"
+     "（詳見 ANDROID_PORT.md §6）。"},
+    {"Touch the on-screen buttons to test the virtual gamepad. "
+     "When the interpreter backend lands, games will execute here.",
+     "觸碰螢幕上的按鈕以測試虛擬手把。"
+     "解譯器後端完成後，遊戲將在此執行。"},
+    {"Hide message", "隱藏提示"},
+    {"Back to Big Picture", "返回大圖模式"},
 };
 
 const std::map<std::string, std::string> ChineseSimplifiedMap = {
@@ -201,6 +212,17 @@ const std::map<std::string, std::string> ChineseSimplifiedMap = {
     {"Trophy Notification Duration", "奖杯通知持续时间"},
     {"Additional DMem Allocation", "额外 DMEM 分配"},
     {"Vblank Frequency", "Vblank 频率"},
+    // Touch overlay / compatibility-mode UI
+    {"Compatibility mode — game loaded, but x86-64 → ARM64 "
+     "interpreter is still in development (see ANDROID_PORT.md §6).",
+     "兼容模式 — 游戏已加载，但 x86-64 → ARM64 解释器仍在开发中"
+     "（详见 ANDROID_PORT.md §6）。"},
+    {"Touch the on-screen buttons to test the virtual gamepad. "
+     "When the interpreter backend lands, games will execute here.",
+     "触摸屏幕上的按钮以测试虚拟手柄。"
+     "解释器后端完成后，游戏将在此处运行。"},
+    {"Hide message", "隐藏提示"},
+    {"Back to Big Picture", "返回大图模式"},
 };
 
 const std::map<std::string, std::string> FinnishMap = {

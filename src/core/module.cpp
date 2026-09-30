@@ -101,8 +101,19 @@ Module::~Module() = default;
 
 s32 Module::Start(u64 args, const void* argp, void* param) {
     LOG_INFO(Core_Linker, "Module started : {}", name);
+#if defined(ARCH_ARM64)
+    // Android/ARM64 port: the foreign x86-64 entry point cannot be called
+    // directly on ARM64 (it would jump into PS4 game code that has no ARM64
+    // equivalent in this build). Return ORBIS_OK without jumping so the
+    // caller sees a "successful" module start; the actual game loop is
+    // driven from Emulator::Run via TouchOverlay::RunCompatibilityMode.
+    LOG_WARNING(Core_Linker,
+                "Skipping foreign x86-64 entry point for {} (ARM64 compatibility mode)", name);
+    return ORBIS_OK;
+#else
     const VAddr addr = dynamic_info.init_virtual_addr + GetBaseAddress();
     return reinterpret_cast<EntryFunc>(addr)(args, argp, param);
+#endif
 }
 
 void Module::LoadModuleToMemory(u32& max_tls_index) {
