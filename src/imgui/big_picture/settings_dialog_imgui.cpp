@@ -1,8 +1,10 @@
 //  SPDX-FileCopyrightText: Copyright 2025 shadPS4 Emulator Project
 //  SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <filesystem>
 #include <map>
 #include <ranges>
+#include <system_error>
 #include <ImGuiFileDialog.h>
 #include <cmrc/cmrc.hpp>
 #include <stb_image.h>
@@ -605,9 +607,56 @@ void SettingsWindow::DrawGameFolderManager() {
                       window_flags);
 
     if (ImGui::Button(tr("Add Folder").c_str(), ImVec2(400.f * uiScale, 0))) {
+        // Android port: ImGuiFileDialog defaults to "." which resolves to
+        // the app's process CWD (typically "/" on Android). On Android the
+        // user-visible storage tree lives under /storage/emulated/0/ — open
+        // the dialog there directly. We also pick the first existing
+        // shared-storage path so the file picker shows real folders
+        // immediately, instead of an empty "/" tree.
+        std::string start_path = ".";
+#ifdef __ANDROID__
+        {
+            const char* android_paths[] = {
+                "/storage/emulated/0/Games",
+                "/storage/emulated/0/Download",
+                "/storage/emulated/0/Pictures",
+                "/storage/emulated/0/Documents",
+                "/storage/emulated/0",
+                "/sdcard",
+                "/storage",
+            };
+            std::error_code ec;
+            for (const char* p : android_paths) {
+                if (std::filesystem::is_directory(p, ec)) {
+                    start_path = p;
+                    break;
+                }
+            }
+            // Seed the dialog bookmarks with the common Android storage
+            // roots so the user can jump between them with one tap.
+            static bool android_bookmarks_added = false;
+            if (!android_bookmarks_added) {
+                android_bookmarks_added = true;
+                for (const char* p : android_paths) {
+                    if (std::filesystem::is_directory(p, ec)) {
+                        // Use the last path segment as the bookmark name.
+                        std::string name = p;
+                        const auto slash = name.find_last_of('/');
+                        if (slash != std::string::npos && slash + 1 < name.size()) {
+                            name = name.substr(slash + 1);
+                        }
+                        if (name.empty() || name == "0") {
+                            name = "Internal Storage";
+                        }
+                        ImGuiFileDialog::Instance()->AddBookmark(name, p);
+                    }
+                }
+            }
+        }
+#endif
         ImGuiFileDialog::Instance()->OpenDialog("OpenFolder",
                                                 tr("Add shadPS4 game folder").c_str(), nullptr,
-                                                ".", 1, nullptr,
+                                                start_path, 1, nullptr,
                                                 ImGuiFileDialogFlags_DisableCreateDirectoryButton |
                                                     ImGuiFileDialogFlags_DontShowHiddenFiles);
 

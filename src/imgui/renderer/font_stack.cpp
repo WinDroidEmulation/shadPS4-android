@@ -119,6 +119,27 @@ const ImWchar* GetCjkCoverageRanges(ImFontAtlas* atlas, const int console_langua
     }
 }
 
+// Build a union of every CJK glyph range ImGui knows about. Used when we
+// want the font atlas to cover any user switch between JP/KR/SC/TC at
+// runtime without rebuilding. The builder dedupes overlapping codepoints,
+// so the result is one compact set: roughly the full CJK block (the union
+// of ChineseFull + Japanese hiragana/katakana + Korean Hangul), which is
+// about 25k glyphs.
+// Returns ranges suitable for ImFontGlyphRangesBuilder::AddRanges.
+const ImWchar* GetCjkAllRanges(ImFontAtlas* atlas) {
+    static ImVector<ImWchar> ranges{};
+    if (ranges.empty()) {
+        ImFontGlyphRangesBuilder rb{};
+        // ChineseFull already includes all unified CJK ideographs + SC
+        // subset; Japanese adds hiragana/katakana; Korean adds Hangul.
+        rb.AddRanges(atlas->GetGlyphRangesChineseFull());
+        rb.AddRanges(atlas->GetGlyphRangesJapanese());
+        rb.AddRanges(atlas->GetGlyphRangesKorean());
+        rb.BuildRanges(&ranges);
+    }
+    return ranges.Data;
+}
+
 void AddMergedFont(ImFontAtlas* atlas, const CompressedFontBlob blob, const float font_size,
                    const ImWchar* glyph_ranges, const ImFontConfig& base_cfg,
                    const int font_no = 0) {
@@ -143,12 +164,24 @@ ImFont* AddPrimaryUiFont(ImFontAtlas* atlas, const float font_size, const int co
     AddMergedFont(atlas, kNotoSansSymbols2Blob, font_size, kSymbolsRanges, base_cfg);
 
     if (include_cjk_fallback) {
-        // Keep the atlas lean by only merging CJK ranges for active CJK console locales.
-        const ImWchar* cjk_ranges = GetCjkCoverageRanges(atlas, console_language);
-        if (cjk_ranges != nullptr) {
-            AddMergedFont(atlas, kNotoSansCjkBlob, font_size, cjk_ranges, base_cfg,
-                          GetCjkFontIndex(console_language));
-        }
+        // Always merge all four CJK subsets (JP/KR/SC/TC) so the font atlas
+        // covers any user language switch at runtime without needing a
+        // rebuild. Each subset lives in its own TTC sub-font, so we issue
+        // four separate AddFontFromMemoryCompressedTTF calls against the
+        // same compressed NotoSansCJK blob, each with its own FontNo.
+        //
+        // The glyph ranges passed in are the union of all CJK ranges so
+        // ImGui packs every codepoint into the atlas once, regardless of
+        // which sub-font contributed it.
+        const ImWchar* cjk_all = GetCjkAllRanges(atlas);
+        AddMergedFont(atlas, kNotoSansCjkBlob, font_size, cjk_all, base_cfg,
+                      kNotoSansCjkFontIndexJp);
+        AddMergedFont(atlas, kNotoSansCjkBlob, font_size, cjk_all, base_cfg,
+                      kNotoSansCjkFontIndexKr);
+        AddMergedFont(atlas, kNotoSansCjkBlob, font_size, cjk_all, base_cfg,
+                      kNotoSansCjkFontIndexSc);
+        AddMergedFont(atlas, kNotoSansCjkBlob, font_size, cjk_all, base_cfg,
+                      kNotoSansCjkFontIndexTc);
     }
 
     return font;
