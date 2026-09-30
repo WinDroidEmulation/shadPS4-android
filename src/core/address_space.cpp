@@ -733,7 +733,16 @@ struct AddressSpace::Impl {
         shm_unlink(shm_path.c_str());
 #else
 #ifndef __FreeBSD__
+        // On Android we map three separate regions (no single virtual_base),
+        // so madvise each one individually. On other platforms there's a
+        // single contiguous virtual_base/virtual_size.
+#if defined(__ANDROID__)
+        madvise(system_managed_base, system_managed_size, MADV_HUGEPAGE);
+        madvise(system_reserved_base, system_reserved_size, MADV_HUGEPAGE);
+        madvise(user_base, user_size, MADV_HUGEPAGE);
+#else
         madvise(virtual_base, virtual_size, MADV_HUGEPAGE);
+#endif
 #endif
         // NOTE: If you add MFD_HUGETLB or whatever, remember that FBSD will break (libc bug)
         // so please, do not, add MFD_* whatever unless you ifdef it away (must be 0 for FBSD)
