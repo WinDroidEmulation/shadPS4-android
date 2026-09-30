@@ -506,7 +506,9 @@ void RunCompatibilityMode(const std::string& game_path,
             }
             // SDL_EVENT_GAMEPAD_BUTTON_DOWN on the Android "Back" button
             // (the OS-level back gesture) should also exit.
-            if (event.type == SDL_EVENT_KEY_DOWN && event.key.keysym.sym == SDLK_AC_BACK) {
+            // SDL3's SDL_KeyboardEvent has the keycode in `event.key.key`
+            // (SDL2 used `event.key.keysym.sym`).
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_AC_BACK) {
                 done = true;
             }
         }
