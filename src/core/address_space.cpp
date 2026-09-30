@@ -46,7 +46,11 @@ constexpr VAddr USER_MIN = 0x7000000000ULL;
 constexpr VAddr SYSTEM_RESERVED_MAX = 0xFFFFFFFFFULL;
 constexpr VAddr USER_MIN = 0x1000000000ULL;
 #endif
-#if defined(__linux__)
+#if defined(__ANDROID__)
+// Android: limit user area to 4 GB to keep mmap sizes reasonable.
+// The PS4 has ~5 GB of usable game memory; 4 GB covers most homebrew.
+constexpr VAddr USER_MAX = 0x1FFFFFFFFFFFULL;
+#elif defined(__linux__)
 // Linux maps the shadPS4 executable around here, so limit the user maximum
 constexpr VAddr USER_MAX = 0x54FFFFFFFFFFULL;
 #elif defined(__FreeBSD__)
@@ -661,6 +665,21 @@ struct AddressSpace::Impl {
                                        system_reserved_size, protection_flags, map_flags, -1, 0));
         user_base = reinterpret_cast<u8*>(
             mmap(reinterpret_cast<void*>(USER_MIN), user_size, protection_flags, map_flags, -1, 0));
+#elif defined(__ANDROID__)
+        // Android port: the total virtual address space (~87 TB) is far too
+        // large for a single mmap on Android's bionic kernel (which rejects
+        // huge sparse mappings with ENOMEM). Map each region separately
+        // without MAP_FIXED — let the kernel pick addresses — and let the
+        // interpreter's address translation handle the offsetting.
+        map_flags &= ~MAP_FIXED;
+        system_managed_base =
+            reinterpret_cast<u8*>(mmap(nullptr, system_managed_size, protection_flags,
+                                       map_flags, -1, 0));
+        system_reserved_base =
+            reinterpret_cast<u8*>(mmap(nullptr, system_reserved_size, protection_flags,
+                                       map_flags, -1, 0));
+        user_base = reinterpret_cast<u8*>(
+            mmap(nullptr, user_size, protection_flags, map_flags, -1, 0));
 #else
         const auto virtual_size = system_managed_size + system_reserved_size + user_size;
 #if defined(ARCH_X86_64) && !defined(__FreeBSD__)
