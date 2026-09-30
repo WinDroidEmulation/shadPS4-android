@@ -19,6 +19,10 @@
 
 #ifdef ARCH_ARM64
 #include <sys/mman.h>
+// Forward-declare the HLE bridge's arena registration function so
+// AllocateTrampoline can call it at first mmap. Defined in
+// src/core/cpu/interpreter/x64_hle_bridge.cpp.
+extern "C" void Core_Cpu_RegisterAerolibStubArena(u64 base, u64 size);
 #endif
 
 namespace Core::AeroLib {
@@ -40,7 +44,6 @@ static std::vector<StubEntry> g_stub_entries;
 static std::mutex g_stub_mutex;
 
 u64 PS4_SYSV_ABI CommonStub(u64 index) {
-
     const auto& e = g_stub_entries[index];
     if (e.nid) {
         LOG_ERROR(Core, "Stub: {} (nid: {}) called, returning zero to {}", e.nid->name, e.nid->nid,
@@ -101,7 +104,6 @@ static std::vector<StubEntry> g_stub_entries;
 static std::mutex g_stub_mutex;
 
 u64 PS4_SYSV_ABI CommonStub(u64 index) {
-
     const auto& e = g_stub_entries[index];
     if (e.nid) {
         LOG_ERROR(Core, "Stub: {} (nid: {}) called, returning zero to {}", e.nid->name, e.nid->nid,
@@ -189,15 +191,7 @@ u64 GetStub(const char* nid) {
 // C-linkage wrapper for the x86-64 interpreter's HLE bridge (see
 // src/core/cpu/interpreter/x64_hle_bridge.cpp). The interpreter can't
 // execute the ARM64 trampoline code in the stub arena, so it calls
-// this wrapper instead which forwards to the static CommonStub
-// function inside the Core::AeroLib namespace.
+// this wrapper instead which forwards to CommonStub.
 extern "C" u64 PS4_SYSV_ABI AeroLibCommonStub(u64 index) {
     return Core::AeroLib::CommonStub(index);
 }
-
-// Called by the stub arena allocator on first allocation so the
-// interpreter can detect stub addresses and divert them to the HLE
-// bridge. We extern-declare this here (defined in
-// src/core/cpu/interpreter/x64_hle_bridge.cpp) so the ARM64 branch of
-// stubs.cpp can call it.
-extern "C" void Core_Cpu_RegisterAerolibStubArena(u64 base, u64 size);
