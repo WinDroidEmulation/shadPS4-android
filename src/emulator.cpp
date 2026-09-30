@@ -454,9 +454,12 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
     }
 
     EmulatorSettings.Load(id);
-    // Windows static guest red-zone protection
+    // Windows static guest red-zone protection — only available on x86_64
+    // hosts (cpu_patches.cpp is compiled only when ARCHITECTURE == "x86_64").
+#if defined(ARCH_X86_64)
     WindowsGuestRedZoneProtection::SetActiveMode(
         EmulatorSettings.GetWindowsGuestRedZoneProtectionMode());
+#endif
     // Switch to configured log
     Common::Log::Switch((!id.empty() && EmulatorSettings.IsLogSeparate()) ? id + ".log"
                                                                           : "shad_log.txt",
