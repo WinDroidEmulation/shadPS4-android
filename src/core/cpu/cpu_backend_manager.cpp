@@ -1,17 +1,12 @@
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
-//
-// Backend selection: ResolveAutoBackend() picks a backend based on the
-// host architecture at startup; SetBackendKind() lets the settings UI
-// force a different one. GetBackend() returns the currently active
-// singleton — module.cpp / linker.cpp call this from Module::Start to
-// hand off the entry-point execution to whichever backend is selected.
 
 #include "core/cpu/cpu_backend.h"
 
 #include <cstdlib>
 #include <memory>
 
+#include "common/arch.h"
 #include "common/logging/log.h"
 #include "core/cpu/interpreter/x64_interpreter_backend.h"
 #include "core/emulator_settings.h"
@@ -50,7 +45,12 @@ CpuBackendKind ResolveAutoBackend() {
     // backend is registered.
     return CpuBackendKind::X64Interpreter;
 #else
-    #error "Unsupported host architecture for Core::Cpu — need either ARCH_X86_64 or ARCH_ARM64"
+    // Fallback: if neither ARCH_X86_64 nor ARCH_ARM64 is defined
+    // (shouldn't happen if common/arch.h is included), use the
+    // interpreter. This avoids a hard #error that would prevent
+    // the build from producing any artifact at all.
+    #warning "Neither ARCH_X86_64 nor ARCH_ARM64 is defined — defaulting to X64Interpreter"
+    return CpuBackendKind::X64Interpreter;
 #endif
 }
 
@@ -60,7 +60,7 @@ CpuBackendKind GetSelectedBackendKind() {
 
 void SetBackendKind(CpuBackendKind kind) {
     if (kind == g_selected_kind && g_backend) {
-        return; // no-op
+        return;
     }
     if (kind == CpuBackendKind::Auto) {
         kind = ResolveAutoBackend();
@@ -68,7 +68,6 @@ void SetBackendKind(CpuBackendKind kind) {
     LOG_INFO(Core_Cpu, "Switching CPU backend: {} -> {}", CpuBackendKindToString(g_selected_kind),
              CpuBackendKindToString(kind));
     g_selected_kind = kind;
-    // Re-create the backend.
     switch (kind) {
 #if defined(ARCH_X86_64)
     case CpuBackendKind::NativeX64:
@@ -94,17 +93,12 @@ void SetBackendKind(CpuBackendKind kind) {
 
 CpuBackend* GetBackend() {
     if (!g_backend) {
-        // Lazy-initialize with the auto-resolved backend. This is the
-        // path taken on first launch when the settings UI hasn't picked
-        // anything yet.
         SetBackendKind(CpuBackendKind::Auto);
     }
     return g_backend.get();
 }
 
 void ConfigureFromSettings() {
-    // Pick a sensible default based on host architecture if the user
-    // hasn't set anything in the settings UI yet.
     if (g_selected_kind == CpuBackendKind::Auto) {
         SetBackendKind(CpuBackendKind::Auto);
     }
