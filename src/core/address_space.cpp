@@ -35,18 +35,16 @@ namespace Core {
 
 // Constants used for mapping address space.
 #if defined(__ANDROID__)
-// Android: drastically reduce all virtual address ranges. Android's
-// kernel rejects large mmap calls (even with MAP_NORESERVE) — the
-// default per-process vm limit is typically a few GB. We cap each
-// region to a few hundred MB; the interpreter translates guest
-// addresses to host addresses at runtime so the guest VA layout
-// doesn't need to match real PS4 ranges.
-constexpr VAddr SYSTEM_MANAGED_MIN   = 0x400000ULL;
-constexpr VAddr SYSTEM_MANAGED_MAX   = 0x3FFFFFFFULL;       // ~1 GB
-constexpr VAddr SYSTEM_RESERVED_MIN  = 0x40000000ULL;
-constexpr VAddr SYSTEM_RESERVED_MAX  = 0x7FFFFFFFULL;       // ~1 GB
-constexpr VAddr USER_MIN             = 0x80000000ULL;
-constexpr VAddr USER_MAX             = 0x17FFFFFFFULL;      // ~6 GB
+// Android: use addresses high enough to avoid clobbering libc/SDL
+// libraries (which load at 0x400000 - 0x3FFFFFFF on 64-bit Android)
+// but low enough that the kernel accepts MAP_FIXED. The 0x200000000
+// (8 GB) base is above all Android runtime libraries.
+constexpr VAddr SYSTEM_MANAGED_MIN   = 0x200000000ULL;       // 8 GB
+constexpr VAddr SYSTEM_MANAGED_MAX   = 0x23FFFFFFFULL;       // ~1 GB
+constexpr VAddr SYSTEM_RESERVED_MIN  = 0x240000000ULL;       // 9 GB
+constexpr VAddr SYSTEM_RESERVED_MAX  = 0x27FFFFFFFULL;       // ~1 GB
+constexpr VAddr USER_MIN             = 0x280000000ULL;       // 10 GB
+constexpr VAddr USER_MAX             = 0x3BFFFFFFFULL;       // ~5 GB
 #else
 constexpr VAddr SYSTEM_MANAGED_MIN = 0x400000ULL;
 constexpr VAddr SYSTEM_MANAGED_MAX = 0x7FFFFBFFFULL;
