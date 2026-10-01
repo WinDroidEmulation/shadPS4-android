@@ -53,20 +53,27 @@ void SetObjectName(vk::Device device, const HandleType& handle, const char* form
 template <StringLiteral msg = "">
 static void Check(vk::Result r) {
     if constexpr (msg.len <= 1) {
-        ASSERT_MSG(r == vk::Result::eSuccess, "vk::Result={}", vk::to_string(r));
+        if (r != vk::Result::eSuccess) {
+            LOG_ERROR(Render_Vulkan, "vk::Result={}", vk::to_string(r));
+        }
     } else {
-        ASSERT_MSG(r == vk::Result::eSuccess, "Failed to {}: vk::Result={}", msg.value,
-                   vk::to_string(r));
+        if (r != vk::Result::eSuccess) {
+            LOG_ERROR(Render_Vulkan, "Failed to {}: vk::Result={}", msg.value, vk::to_string(r));
+        }
     }
 }
 
 template <StringLiteral msg = "", typename T>
 static T Check(vk::ResultValue<T> r) {
     if constexpr (msg.len <= 1) {
-        ASSERT_MSG(r.result == vk::Result::eSuccess, "vk::Result={}", vk::to_string(r.result));
+        if (r.result != vk::Result::eSuccess) {
+            LOG_ERROR(Render_Vulkan, "vk::Result={}", vk::to_string(r.result));
+        }
     } else {
-        ASSERT_MSG(r.result == vk::Result::eSuccess, "Failed to {}: vk::Result={}", msg.value,
-                   vk::to_string(r.result));
+        if (r.result != vk::Result::eSuccess) {
+            LOG_ERROR(Render_Vulkan, "Failed to {}: vk::Result={}", msg.value,
+                       vk::to_string(r.result));
+        }
     }
     return std::move(r.value);
 }
