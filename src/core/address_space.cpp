@@ -39,12 +39,14 @@ namespace Core {
 // libraries (which load at 0x400000 - 0x3FFFFFFF on 64-bit Android)
 // but low enough that the kernel accepts MAP_FIXED. The 0x200000000
 // (8 GB) base is above all Android runtime libraries.
+// User region extends to 0x900000000 (36 GB) to cover PS4 flexible
+// memory at 0x880000000 + 512 MB.
 constexpr VAddr SYSTEM_MANAGED_MIN   = 0x200000000ULL;       // 8 GB
 constexpr VAddr SYSTEM_MANAGED_MAX   = 0x23FFFFFFFULL;       // ~1 GB
 constexpr VAddr SYSTEM_RESERVED_MIN  = 0x240000000ULL;       // 9 GB
 constexpr VAddr SYSTEM_RESERVED_MAX  = 0x27FFFFFFFULL;       // ~1 GB
 constexpr VAddr USER_MIN             = 0x280000000ULL;       // 10 GB
-constexpr VAddr USER_MAX             = 0x3BFFFFFFFULL;       // ~5 GB
+constexpr VAddr USER_MAX             = 0x8FFFFFFFFULL;       // ~36 GB
 #else
 constexpr VAddr SYSTEM_MANAGED_MIN = 0x400000ULL;
 constexpr VAddr SYSTEM_MANAGED_MAX = 0x7FFFFBFFFULL;
