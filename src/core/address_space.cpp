@@ -34,6 +34,20 @@ asm(".zerofill USER_AREA,USER_AREA,__USER_AREA,0x5F9000000000");
 namespace Core {
 
 // Constants used for mapping address space.
+#if defined(__ANDROID__)
+// Android: drastically reduce all virtual address ranges. Android's
+// kernel rejects large mmap calls (even with MAP_NORESERVE) — the
+// default per-process vm limit is typically a few GB. We cap each
+// region to a few hundred MB; the interpreter translates guest
+// addresses to host addresses at runtime so the guest VA layout
+// doesn't need to match real PS4 ranges.
+constexpr VAddr SYSTEM_MANAGED_MIN   = 0x400000ULL;
+constexpr VAddr SYSTEM_MANAGED_MAX   = 0x3FFFFFFFULL;       // ~1 GB
+constexpr VAddr SYSTEM_RESERVED_MIN  = 0x40000000ULL;
+constexpr VAddr SYSTEM_RESERVED_MAX  = 0x7FFFFFFFULL;       // ~1 GB
+constexpr VAddr USER_MIN             = 0x80000000ULL;
+constexpr VAddr USER_MAX             = 0x17FFFFFFFULL;      // ~6 GB
+#else
 constexpr VAddr SYSTEM_MANAGED_MIN = 0x400000ULL;
 constexpr VAddr SYSTEM_MANAGED_MAX = 0x7FFFFBFFFULL;
 constexpr VAddr SYSTEM_RESERVED_MIN = 0x7FFFFC000ULL;
@@ -46,11 +60,7 @@ constexpr VAddr USER_MIN = 0x7000000000ULL;
 constexpr VAddr SYSTEM_RESERVED_MAX = 0xFFFFFFFFFULL;
 constexpr VAddr USER_MIN = 0x1000000000ULL;
 #endif
-#if defined(__ANDROID__)
-// Android: limit user area to 4 GB to keep mmap sizes reasonable.
-// The PS4 has ~5 GB of usable game memory; 4 GB covers most homebrew.
-constexpr VAddr USER_MAX = 0x1FFFFFFFFFFFULL;
-#elif defined(__linux__)
+#if defined(__linux__)
 // Linux maps the shadPS4 executable around here, so limit the user maximum
 constexpr VAddr USER_MAX = 0x54FFFFFFFFFFULL;
 #elif defined(__FreeBSD__)
@@ -58,6 +68,7 @@ constexpr VAddr USER_MAX = 0x54FFFFFFFFFFULL;
 constexpr VAddr USER_MAX = 0xFFFFFFFFFFFULL;
 #else
 constexpr VAddr USER_MAX = 0x5FFFFFFFFFFFULL;
+#endif
 #endif
 
 // Constants for the sizes of the ranges in address space.
