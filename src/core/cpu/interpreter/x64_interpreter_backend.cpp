@@ -25,6 +25,11 @@
 #include <cstring>
 #include <functional>
 
+#if defined(__ANDROID__)
+#include <sys/mman.h>
+#include <cerrno>
+#endif
+
 #include "common/assert.h"
 #include "common/logging/log.h"
 
@@ -953,6 +958,44 @@ u64 X64InterpreterBackend::Execute(u64 rip, const GuestCallContext& /*ctx*/) {
     X64CpuState state{};
     state.rip = rip;
     state.in_guest_code = true;
+
+    // Android/ARM64 port: allocate a guest stack for the interpreter.
+    // On x86 hosts, Linker::RunMainEntry sets up the stack via inline
+    // assembly (push entry params, align RSP, etc.). On ARM64 we skip
+    // RunMainEntry entirely and go straight to the interpreter, so we
+    // need to set up the stack ourselves.
+    //
+    // We mmap a 1 MB stack at a fixed guest address inside the user
+    // region. RSP starts at the top (stack grows downward). We also
+    // push a sentinel return address (0) so the first RET exits the
+    // interpreter loop (via the HLE bridge or by returning to address
+    // 0 which will fail to decode and break the loop).
+#if defined(__ANDROID__)
+    {
+        constexpr u64 kStackSize = 1 * 1024 * 1024; // 1 MB
+        constexpr u64 kStackBase = 0x3A0000000ULL;   // inside user region
+        void* stack_ptr = mmap(reinterpret_cast<void*>(kStackBase), kStackSize,
+                               PROT_READ | PROT_WRITE,
+                               MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+        if (stack_ptr == MAP_FAILED) {
+            LOG_CRITICAL(Core_Cpu, "Failed to allocate guest stack: {}", strerror(errno));
+            return rip;
+        }
+        // Stack grows downward; RSP starts at the top.
+        state.gpr[GPR_RSP] = kStackBase + kStackSize - 16;
+        // 16-byte align (PS4 ABI requires 16-byte aligned RSP at entry,
+        // but videoout_basic expects it misaligned by 8, so we leave
+        // RSP at (top - 16) which is 16-aligned).
+        // Push a sentinel return address (0) so RET exits.
+        state.gpr[GPR_RSP] -= 8;
+        WriteMemory(state.gpr[GPR_RSP], 0, 8, false);
+        // Misalign by 8 (videoout_basic expects this).
+        state.gpr[GPR_RSP] -= 8;
+        WriteMemory(state.gpr[GPR_RSP], 0, 8, false);
+        LOG_INFO(Core_Cpu, "Guest stack allocated: 0x{:x} - 0x{:x}, RSP=0x{:x}",
+                  kStackBase, kStackBase + kStackSize, state.gpr[GPR_RSP]);
+    }
+#endif
 
     ZydisDecodedInstruction inst{};
     ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
