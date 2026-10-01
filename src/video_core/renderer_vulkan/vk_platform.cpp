@@ -179,6 +179,14 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     std::vector<const char*> extensions;
     extensions.reserve(7);
 
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+    // Android: we use Headless window type in sdl_window.cpp, but still
+    // need VK_KHR_android_surface + VK_KHR_surface to create a presentable
+    // surface via ANativeWindow.
+    (void)window_type; // suppress unused warning
+    extensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+    extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+#else
     switch (window_type) {
     case Frontend::WindowSystemType::Headless:
         break;
@@ -206,6 +214,7 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     if (window_type != Frontend::WindowSystemType::Headless) {
         extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
     }
+#endif
 
     if (EmulatorSettings.IsHdrAllowed()) {
         extensions.push_back(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
