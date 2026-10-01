@@ -677,20 +677,21 @@ struct AddressSpace::Impl {
         user_base = reinterpret_cast<u8*>(
             mmap(reinterpret_cast<void*>(USER_MIN), user_size, protection_flags, map_flags, -1, 0));
 #elif defined(__ANDROID__)
-        // Android port: the total virtual address space (~87 TB) is far too
-        // large for a single mmap on Android's bionic kernel (which rejects
-        // huge sparse mappings with ENOMEM). Map each region separately
-        // without MAP_FIXED — let the kernel pick addresses — and let the
-        // interpreter's address translation handle the offsetting.
-        map_flags &= ~MAP_FIXED;
+        // Android port: map the three regions at the PS4's fixed guest
+        // addresses with MAP_FIXED + MAP_NORESERVE. The sizes are small
+        // (1+1+4 = 6 GB total) so the kernel accepts them. MAP_FIXED
+        // ensures guest VAs == host VAs, which shadPS4 requires because
+        // the guest code accesses memory through hardcoded PS4 VAs
+        // (e.g. thread heap at SystemReservedVirtualBase, game modules
+        // at fixed load addresses, etc.).
         system_managed_base =
-            reinterpret_cast<u8*>(mmap(nullptr, system_managed_size, protection_flags,
-                                       map_flags, -1, 0));
+            reinterpret_cast<u8*>(mmap(reinterpret_cast<void*>(SYSTEM_MANAGED_MIN),
+                                       system_managed_size, protection_flags, map_flags, -1, 0));
         system_reserved_base =
-            reinterpret_cast<u8*>(mmap(nullptr, system_reserved_size, protection_flags,
-                                       map_flags, -1, 0));
+            reinterpret_cast<u8*>(mmap(reinterpret_cast<void*>(SYSTEM_RESERVED_MIN),
+                                       system_reserved_size, protection_flags, map_flags, -1, 0));
         user_base = reinterpret_cast<u8*>(
-            mmap(nullptr, user_size, protection_flags, map_flags, -1, 0));
+            mmap(reinterpret_cast<void*>(USER_MIN), user_size, protection_flags, map_flags, -1, 0));
 #else
         const auto virtual_size = system_managed_size + system_reserved_size + user_size;
 #if defined(ARCH_X86_64) && !defined(__FreeBSD__)
