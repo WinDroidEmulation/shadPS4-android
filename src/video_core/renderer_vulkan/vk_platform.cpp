@@ -63,7 +63,18 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::WindowSDL& e
     const auto& window_info = emu_window.GetWindowInfo();
     vk::SurfaceKHR surface{};
 
-#if defined(VK_USE_PLATFORM_WIN32_KHR)
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+    // Android: use VkAndroidSurfaceCreateInfoKHR with the ANativeWindow
+    // from SDL_GetWindowProperties(SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER).
+    const vk::AndroidSurfaceCreateInfoKHR android_ci = {
+        .window = static_cast<ANativeWindow*>(window_info.render_surface),
+    };
+    const auto result = instance.createAndroidSurfaceKHR(&android_ci, nullptr, &surface);
+    if (result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "Failed to initialize Android surface: {}",
+                  static_cast<int>(result));
+    }
+#elif defined(VK_USE_PLATFORM_WIN32_KHR)
     if (window_info.type == Frontend::WindowSystemType::Windows) {
         const vk::Win32SurfaceCreateInfoKHR win32_ci = {
             .hinstance = nullptr,

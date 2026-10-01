@@ -158,7 +158,11 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, Input::GameControllers* controller
 
     SDL_InitSubSystem(SDL_INIT_GAMEPAD);
 
-#if defined(SDL_PLATFORM_WIN32)
+#if defined(SDL_PLATFORM_ANDROID)
+    window_info.type = WindowSystemType::Headless;
+    window_info.render_surface = SDL_GetPointerProperty(
+        SDL_GetWindowProperties(window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
+#elif defined(SDL_PLATFORM_WIN32)
     window_info.type = WindowSystemType::Windows;
     window_info.render_surface = SDL_GetPointerProperty(SDL_GetWindowProperties(window),
                                                         SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
