@@ -274,12 +274,27 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
             if (thread && thread->DispatchSignal(NativeToOrbisSignal(sig), info_p, context_p)) {
                 return;
             }
+#if defined(__ANDROID__)
+            // On Android/ARM64 the interpreter uses reinterpret_cast to
+            // read/write guest memory. Some guest code may access
+            // unmapped addresses (e.g. null pointer derefs, bad RIP
+            // after unimplemented instruction). Instead of aborting,
+            // log the violation and let the interpreter handle it.
+            LOG_ERROR(Core, "Access violation: {} address {} at code {}",
+                      is_write ? "Write to" : is_exec ? "Executed from" : "Read from",
+                      fmt::ptr(info->si_addr), fmt::ptr(code_address));
+            // Restore the default SIGSEGV handler so the process
+            // terminates cleanly instead of looping.
+            signal(SIGSEGV, SIG_DFL);
+            raise(SIGSEGV);
+#else
             UNREACHABLE_MSG("Unhandled access violation at code address {}: {} address {}",
                             fmt::ptr(code_address),
                             is_write  ? "Write to"
                             : is_exec ? "Executed from"
                                       : "Read from",
                             fmt::ptr(info->si_addr));
+#endif
         }
         break;
     }
