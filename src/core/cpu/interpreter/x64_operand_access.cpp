@@ -251,7 +251,14 @@ static u64 ComputeMemAddr(const X64CpuState& state,
     const auto& mem = op.mem;
     u64 base = 0;
     if (mem.base != ZYDIS_REGISTER_NONE) {
-        base = GetRegValue(state, mem.base, 8);
+        if (mem.base == ZYDIS_REGISTER_RIP || mem.base == ZYDIS_REGISTER_EIP) {
+            // RIP-relative addressing: Zydis encodes the displacement
+            // relative to the address of the NEXT instruction
+            // (RIP + instruction.length), not the current RIP.
+            base = state.rip + inst.length;
+        } else {
+            base = GetRegValue(state, mem.base, 8);
+        }
     }
     u64 index = 0;
     if (mem.index != ZYDIS_REGISTER_NONE) {
