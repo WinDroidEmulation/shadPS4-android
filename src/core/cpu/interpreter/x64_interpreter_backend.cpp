@@ -1002,6 +1002,16 @@ u64 X64InterpreterBackend::Execute(u64 rip, const GuestCallContext& /*ctx*/) {
 
     u64 instruction_count = 0;
     while (state.in_guest_code) {
+        // Sanity check: if RIP is suspiciously low, it's likely a
+        // bad jump/return from an instruction we haven't verified.
+        // Log and break instead of crashing.
+        if (state.rip < 0x1000) {
+            LOG_ERROR(Core_Cpu, "Interpreter: RIP=0x{:x} is too low (likely bad jump/ret). Exiting.",
+                      state.rip);
+            DumpRecentInterpreterTrace("bad-rip", 32);
+            break;
+        }
+
         // Optionally consult the JIT's native block provider — if it
         // returns a valid block we'd dispatch to it instead of decoding
         // here. For now this is a no-op (the JIT isn't wired up yet).
@@ -1018,9 +1028,12 @@ u64 X64InterpreterBackend::Execute(u64 rip, const GuestCallContext& /*ctx*/) {
         // may trigger a signal if the guest page isn't fully mapped).
         const u8* code = reinterpret_cast<const u8*>(state.rip);
         u8 code_buf[15];
-        // Use memcpy with a try-catch via signal-safe approach: just
-        // copy the bytes. If the address is unmapped, SIGSEGV will
-        // fire and our signal handler will log it.
+        // Log first few instructions for debugging.
+        if (instruction_count < 10) {
+            LOG_INFO(Core_Cpu, "[{:3}] rip=0x{:016x} rsp=0x{:016x} bytes={:02x} {:02x} {:02x} {:02x}",
+                      instruction_count, state.rip, state.gpr[GPR_RSP],
+                      code[0], code[1], code[2], code[3]);
+        }
         std::memcpy(code_buf, code, 15);
         const ZyanStatus status = ZydisDecoderDecodeFull(
             &m_impl->decoder, code_buf, 15, &inst, operands);
