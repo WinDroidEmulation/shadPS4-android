@@ -571,20 +571,39 @@ HANDLER(Neg) {
 }
 
 HANDLER(Jmp) {
-    const u64 target = ReadOperand(s, inst, operands[0], true);
-    return target;
+    // For relative jumps, the immediate operand is a displacement
+    // relative to the next instruction (RIP + length).
+    const u64 raw = ReadOperand(s, inst, operands[0], true);
+    if (operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
+        const s64 disp = static_cast<s64>(raw);
+        return s.rip + inst.length + disp;
+    }
+    return raw; // register/indirect jump
 }
 
 HANDLER(Jcc) {
     if (EvaluateConditionCode(s, inst.mnemonic)) {
-        const u64 target = ReadOperand(s, inst, operands[0], true);
-        return target;
+        const u64 raw = ReadOperand(s, inst, operands[0], true);
+        if (operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
+            const s64 disp = static_cast<s64>(raw);
+            return s.rip + inst.length + disp;
+        }
+        return raw;
     }
     return s.rip + inst.length;
 }
 
 HANDLER(Call) {
-    const u64 target = ReadOperand(s, inst, operands[0], true);
+    // For relative calls, the immediate operand is a displacement
+    // relative to the next instruction (RIP + length).
+    const u64 raw = ReadOperand(s, inst, operands[0], true);
+    u64 target;
+    if (operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
+        const s64 disp = static_cast<s64>(raw);
+        target = s.rip + inst.length + disp;
+    } else {
+        target = raw; // register/indirect call
+    }
     const u64 ret = s.rip + inst.length;
     s.gpr[GPR_RSP] -= 8;
     WriteMemory(s.gpr[GPR_RSP], ret, 8, false);
