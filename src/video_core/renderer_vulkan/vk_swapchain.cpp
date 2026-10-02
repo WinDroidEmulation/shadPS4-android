@@ -223,8 +223,20 @@ void Swapchain::FindPresentMode() {
 void Swapchain::SetSurfaceProperties() {
     const auto [capabilities_result, capabilities] =
         instance.GetPhysicalDevice().getSurfaceCapabilitiesKHR(surface);
+#if defined(__ANDROID__)
+    // On Android, the surface may be lost during orientation changes or
+    // when the activity goes through lifecycle transitions. Don't abort;
+    // log the error and use safe defaults so the emulator can continue.
+    if (capabilities_result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "Failed to query surface capabilities: {}",
+                  vk::to_string(capabilities_result));
+        extent = vk::Extent2D{1280, 720};
+        return;
+    }
+#else
     ASSERT_MSG(capabilities_result == vk::Result::eSuccess,
                "Failed to query surface capabilities: {}", vk::to_string(capabilities_result));
+#endif
 
     extent = capabilities.currentExtent;
     if (capabilities.currentExtent.width == std::numeric_limits<u32>::max()) {
