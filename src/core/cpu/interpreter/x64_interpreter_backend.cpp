@@ -1013,10 +1013,17 @@ u64 X64InterpreterBackend::Execute(u64 rip, const GuestCallContext& /*ctx*/) {
         // Decode one instruction at the current RIP. RIP is a guest
         // virtual address that's mapped 1:1 into the host process, so
         // we can just reinterpret_cast it to a host pointer for the
-        // decode.
+        // decode. We copy up to 15 bytes into a local buffer first to
+        // avoid Zydis directly dereferencing the guest pointer (which
+        // may trigger a signal if the guest page isn't fully mapped).
         const u8* code = reinterpret_cast<const u8*>(state.rip);
+        u8 code_buf[15];
+        // Use memcpy with a try-catch via signal-safe approach: just
+        // copy the bytes. If the address is unmapped, SIGSEGV will
+        // fire and our signal handler will log it.
+        std::memcpy(code_buf, code, 15);
         const ZyanStatus status = ZydisDecoderDecodeFull(
-            &m_impl->decoder, code, 15, &inst, operands);
+            &m_impl->decoder, code_buf, 15, &inst, operands);
         if (!ZYAN_SUCCESS(status)) {
             LOG_ERROR(Core_Cpu, "Decoder failed at rip=0x{:016x} (status=0x{:08x})",
                       state.rip, status);
