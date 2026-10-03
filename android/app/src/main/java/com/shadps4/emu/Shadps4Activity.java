@@ -5,6 +5,7 @@ package com.shadps4.emu;
 
 import android.Manifest;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -57,9 +58,9 @@ public class Shadps4Activity extends SDLActivity {
 
     /**
      * Atomic counter incremented every time Android fires
-     * {@link org.libsdl.app.SDLSurface#surfaceCreated} — i.e. a new
-     * SurfaceHolder is ready. The C++ renderer polls this via JNI to
-     * detect when a fresh ANativeWindow is available, because SDL3's
+     * {@link Shadps4Surface#surfaceCreated} — i.e. a new SurfaceHolder is
+     * ready. The C++ renderer polls this via JNI to detect when a fresh
+     * ANativeWindow is available, because SDL3's
      * {@code SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER} property is updated
      * on the Java main thread inside {@code onNativeSurfaceCreated}
      * (which runs synchronously inside this counter's bump), but during
@@ -67,10 +68,15 @@ public class Shadps4Activity extends SDLActivity {
      * gap between {@code surfaceDestroyed} (where the old ANativeWindow
      * dies) and {@code surfaceCreated} (where the new one arrives).
      *
+     * <p>Package-private (not private) so that {@link Shadps4Surface} in
+     * the same package can bump it from its {@code surfaceCreated}
+     * override. The C++ side reads it via the public
+     * {@link #getSurfaceGeneration()} getter.
+     *
      * <p>This counter is read from C++ via {@code SDL_JNI_GetSurfaceGeneration}
      * (see sdl_window.cpp).
      */
-    private static volatile int sSurfaceGeneration = 0;
+    static volatile int sSurfaceGeneration = 0;
 
     /** Public getter for the C++ side to poll. */
     public static int getSurfaceGeneration() {
