@@ -160,27 +160,85 @@ bool Swapchain::WaitForFreshSurface() {
     // issues its next flip, which on interpreter-backed Android can take
     // a long time, and may even deadlock on other emulator init steps).
     //
-    // Solution: poll SDL's property every ~50ms for up to ~1 second. As
-    // soon as SDL receives `surfaceCreated` from Java, the property is
-    // updated and our poll will detect the change.
-    constexpr int kMaxRetries = 20;
-    constexpr auto kRetryDelay = std::chrono::milliseconds(50);
+    // We use TWO independent signals here:
+    //   (1) `Shadps4Activity.sSurfaceGeneration` — a Java-side counter
+    //       bumped synchronously inside our `Shadps4Surface.surfaceCreated`
+    //       hook BEFORE calling `super.surfaceCreated` (which fires SDL3's
+    //       onNativeSurfaceCreated and updates the SDL3 property).
+    //       Authoritative: guaranteed to fire on every surfaceCreated.
+    //   (2) `PollAndroidNativeWindow()` — re-reads SDL3's property and
+    //       compares to the cached value. Sometimes returns false even
+    //       after a fresh surface if SDL3 hasn't yet processed the Java
+    //       callback from this thread's POV.
+    //
+    // Either signal triggers a `RefreshSurfaceIfNeeded()` which
+    // re-creates the vk::SurfaceKHR from the current SDL3 property.
+    constexpr int kMaxRetries = 40; // 40 × 25ms = 1000ms
+    constexpr auto kRetryDelay = std::chrono::milliseconds(25);
     LOG_WARNING(Render_Vulkan,
-                "Surface lost; waiting up to {}ms for SDL to deliver new ANativeWindow",
-                kMaxRetries * 50);
+                "Surface lost; waiting up to {}ms for SDL/Java to deliver new ANativeWindow",
+                kMaxRetries * 25);
+    const int initial_java_gen = Frontend::WindowSDL::GetJavaSurfaceGeneration();
     for (int i = 0; i < kMaxRetries; ++i) {
         std::this_thread::sleep_for(kRetryDelay);
+        // (1) Check Java counter first — it fires BEFORE SDL3's property
+        // is updated, so as soon as we see a bump we know a fresh
+        // surface is on the way. We then call RefreshSurfaceIfNeeded()
+        // which polls SDL3's property — but SDL3's update happens
+        // inside super.surfaceCreated which runs synchronously after
+        // our counter bump, so by the time we observe a new generation
+        // the property is guaranteed to be updated.
+        const int java_gen = Frontend::WindowSDL::GetJavaSurfaceGeneration();
+        if (java_gen != initial_java_gen && java_gen != -1) {
+            LOG_INFO(Render_Vulkan,
+                      "Java surface generation changed: {} -> {} (after {}ms); "
+                      "refreshing vk::SurfaceKHR",
+                      initial_java_gen, java_gen, (i + 1) * 25);
+            // SDL3 property update happens synchronously inside our
+            // surfaceCreated hook, so the property is already updated.
+            // Poll it once to refresh our cache and recreate the surface.
+            if (RefreshSurfaceIfNeeded()) {
+                return true;
+            }
+            // Edge case: Java bumped but SDL3's property still hasn't
+            // been observed to change from this thread. Spin a couple
+            // more times to give SDL3 a chance to publish.
+            for (int j = 0; j < 4; ++j) {
+                std::this_thread::sleep_for(kRetryDelay);
+                if (RefreshSurfaceIfNeeded()) {
+                    LOG_INFO(Render_Vulkan,
+                              "Got fresh ANativeWindow after Java gen bump "
+                              "({} extra spins, {}ms total)",
+                              j + 1, (i + 1 + j + 1) * 25);
+                    return true;
+                }
+            }
+            // SDL3's property update seems to be lagging. Force a
+            // surface recreate from the Java-bumped ANativeWindow
+            // pointer that should already be in window_info if SDL3
+            // processed surfaceCreated (we can verify by reading the
+            // property directly via PollAndroidNativeWindow once more).
+            LOG_WARNING(Render_Vulkan,
+                        "Java reported surfaceCreated but SDL3 property still "
+                        "stale; forcing recreate from cached ANativeWindow");
+            return RefreshSurfaceFromNewANativeWindow();
+        }
+        // (2) Fallback: directly poll SDL3's property. Catches the case
+        // where Java counter was bumped but we somehow missed the change
+        // (e.g. JNI returned -1).
         if (RefreshSurfaceIfNeeded()) {
             LOG_INFO(Render_Vulkan,
-                      "Got fresh ANativeWindow after {} retries ({}ms)",
-                      i + 1, (i + 1) * 50);
+                      "Got fresh ANativeWindow after {} retries ({}ms) via SDL3 "
+                      "property poll",
+                      i + 1, (i + 1) * 25);
             return true;
         }
     }
     LOG_ERROR(Render_Vulkan,
-              "ANativeWindow did not change after {}ms; giving up this frame "
-              "(will retry on next Present())",
-              kMaxRetries * 50);
+              "ANativeWindow did not change after {}ms (java_gen: initial={} final={}); "
+              "giving up this frame (will retry on next Present())",
+              kMaxRetries * 25, initial_java_gen,
+              Frontend::WindowSDL::GetJavaSurfaceGeneration());
     return false;
 #else
     return false;

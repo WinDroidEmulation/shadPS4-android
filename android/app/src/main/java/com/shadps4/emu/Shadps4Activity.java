@@ -55,6 +55,42 @@ public class Shadps4Activity extends SDLActivity {
     private static final int REQ_CODE_NOTIFICATIONS = 0x5345;
     private static final int REQ_CODE_ALL_FILES = 0x5346;
 
+    /**
+     * Atomic counter incremented every time Android fires
+     * {@link org.libsdl.app.SDLSurface#surfaceCreated} — i.e. a new
+     * SurfaceHolder is ready. The C++ renderer polls this via JNI to
+     * detect when a fresh ANativeWindow is available, because SDL3's
+     * {@code SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER} property is updated
+     * on the Java main thread inside {@code onNativeSurfaceCreated}
+     * (which runs synchronously inside this counter's bump), but during
+     * an orientation transition the render thread may be polling in the
+     * gap between {@code surfaceDestroyed} (where the old ANativeWindow
+     * dies) and {@code surfaceCreated} (where the new one arrives).
+     *
+     * <p>This counter is read from C++ via {@code SDL_JNI_GetSurfaceGeneration}
+     * (see sdl_window.cpp).
+     */
+    private static volatile int sSurfaceGeneration = 0;
+
+    /** Public getter for the C++ side to poll. */
+    public static int getSurfaceGeneration() {
+        return sSurfaceGeneration;
+    }
+
+    /**
+     * Override SDLActivity's SDLSurface factory so we can install our own
+     * SurfaceHolder callbacks that bump sSurfaceGeneration on
+     * surfaceCreated. SDLActivity's default SDLSurface already wires up
+     * its own callbacks (which fire SDL's onNativeSurfaceCreated etc.),
+     * but we need an additional, lighter-weight signal that's guaranteed
+     * to fire on every surfaceCreated without relying on SDL3's property
+     * update being visible from any thread.
+     */
+    @Override
+    protected org.libsdl.app.SDLSurface createSDLSurface(Context context) {
+        return new Shadps4Surface(context);
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Force landscape orientation immediately, before any native code

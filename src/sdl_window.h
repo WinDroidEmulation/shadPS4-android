@@ -95,6 +95,26 @@ public:
     // state that is allowed to change underneath us.
     bool PollWindowSize() const;
 
+    // Android-only: returns the current value of the static Java counter
+    // `Shadps4Activity.sSurfaceGeneration`, bumped every time Android
+    // fires `surfaceCreated` (i.e. a new SurfaceHolder — and therefore
+    // a new ANativeWindow — is on its way). Returns -1 on non-Android
+    // or if the JNI call fails.
+    //
+    // The renderer uses this to detect that a new ANativeWindow is
+    // available even when SDL3's `SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER`
+    // property hasn't yet been observed to change from the render
+    // thread (SDL3 updates it on the Java main thread inside
+    // `onNativeSurfaceCreated`, which runs synchronously inside our
+    // `Shadps4Surface.surfaceCreated` hook BEFORE bumping the counter,
+    // so by the time we observe a new generation the SDL3 property is
+    // guaranteed to already be updated — but visibility from the
+    // render thread depends on memory ordering across the JNI boundary,
+    // which is why this counter is the authoritative signal).
+    //
+    // On non-Android platforms this returns -1.
+    static int GetJavaSurfaceGeneration();
+
     void SetIcon(std::span<const u8> png_data);
 
     void WaitEvent();

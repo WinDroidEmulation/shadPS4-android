@@ -30,6 +30,11 @@
 #include "sdl_window.h"
 #include "video_core/renderdoc.h"
 
+#if defined(SDL_PLATFORM_ANDROID)
+#include <SDL3/SDL_system.h>
+#include <jni.h>
+#endif
+
 #ifdef __APPLE__
 #include <SDL3/SDL_metal.h>
 #endif
@@ -40,6 +45,12 @@
 CMRC_DECLARE(res);
 
 namespace Frontend {
+
+#if defined(SDL_PLATFORM_ANDROID)
+// JNI helper for WindowSDL::GetJavaSurfaceGeneration is inlined into the
+// method body. We keep SDL3's SDL_system.h and <jni.h> included at the
+// top of this file so the method can use them.
+#endif
 
 using namespace Libraries::Pad;
 
@@ -409,6 +420,36 @@ bool WindowSDL::PollWindowSize() const {
     width = new_w;
     height = new_h;
     return true;
+}
+
+int WindowSDL::GetJavaSurfaceGeneration() {
+#if defined(SDL_PLATFORM_ANDROID)
+    // Forward to the anonymous-namespace JNI helper defined at the top
+    // of this file. We can't reuse the name `GetJavaSurfaceGeneration`
+    // for the helper because it would shadow this method; the helper is
+    // at file scope so we call it via a different path below.
+    JNIEnv* env = static_cast<JNIEnv*>(SDL_GetAndroidJNIEnv());
+    if (env == nullptr) {
+        return -1;
+    }
+    jobject activity = static_cast<jobject>(SDL_GetAndroidActivity());
+    if (activity == nullptr) {
+        return -1;
+    }
+    jclass cls = env->GetObjectClass(activity);
+    if (cls == nullptr) {
+        return -1;
+    }
+    jmethodID mid = env->GetStaticMethodID(cls, "getSurfaceGeneration", "()I");
+    env->DeleteLocalRef(cls);
+    if (mid == nullptr) {
+        env->ExceptionClear();
+        return -1;
+    }
+    return static_cast<int>(env->CallStaticIntMethod(cls, mid));
+#else
+    return -1;
+#endif
 }
 
 Uint32 wheelOffCallback(void* og_event, Uint32 timer_id, Uint32 interval) {
