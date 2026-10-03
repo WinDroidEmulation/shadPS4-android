@@ -870,13 +870,24 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
     }
 
     if (!swapchain.AcquireNextImage()) {
-        // Surface might have been swapped between the RefreshSurfaceIfNeeded
-        // check above and here. Try one more refresh before giving up on
-        // this frame.
-        swapchain.RefreshSurfaceIfNeeded();
-        swapchain.Recreate(window.GetWidth(), window.GetHeight());
+        // Surface is lost (eErrorSurfaceLostKHR). The old ANativeWindow was
+        // destroyed by Android during an orientation transition, but SDL3
+        // may not yet have delivered the new one — `onNativeSurfaceDestroyed`
+        // fires immediately, `onNativeSurfaceCreated` (which updates SDL's
+        // SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER property) fires only after
+        // the Java side constructs the new Surface, typically 100-500ms.
+        // WaitForFreshSurface() polls SDL's property every 50ms for up to
+        // 1 second to give Android time to deliver the new ANativeWindow.
+        if (swapchain.WaitForFreshSurface()) {
+            // Got a fresh ANativeWindow. Recreate the swapchain using the
+            // (now up-to-date) window dimensions and try to acquire again.
+            swapchain.Recreate(window.GetWidth(), window.GetHeight());
+        }
         if (!swapchain.AcquireNextImage()) {
-            // User resizes the window too fast and GPU can't keep up. Skip this frame.
+            // Still can't acquire — either the new ANativeWindow hasn't
+            // arrived yet (SDL is slow), or the orientation transition is
+            // genuinely stuck. Skip this frame; the next Present() call
+            // will retry. The game's main loop should keep issuing flips.
             LOG_WARNING(Render_Vulkan, "Skipping frame!");
             free_frame();
             return;

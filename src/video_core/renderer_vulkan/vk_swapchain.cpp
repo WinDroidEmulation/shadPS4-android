@@ -7,6 +7,8 @@
 #if defined(__ANDROID__)
 #define VK_USE_PLATFORM_ANDROID_KHR
 #include <android/native_window.h>
+#include <chrono>
+#include <thread>
 #endif
 
 #include <algorithm>
@@ -95,6 +97,29 @@ void Swapchain::RecreateSurface() {
 #endif
 }
 
+bool Swapchain::RefreshSurfaceFromNewANativeWindow() {
+#if defined(__ANDROID__)
+    // The cached window_info.render_surface has just been updated to the
+    // new ANativeWindow pointer. Recreate the vk::SurfaceKHR from it, and
+    // also refresh the cached window size so the next swapchain recreate
+    // matches the post-orientation geometry (e.g. portrait 1080x2400 ->
+    // landscape 2400x1080). The main-thread SDL event loop may not have
+    // processed the SDL_EVENT_WINDOW_RESIZED yet.
+    window.PollWindowSize();
+    RecreateSurface();
+    if (surface) {
+        // Surface format / present mode may differ on the new surface;
+        // re-query to be safe.
+        FindPresentFormat();
+        FindPresentMode();
+    }
+    needs_recreation = true;
+    return surface != nullptr;
+#else
+    return false;
+#endif
+}
+
 bool Swapchain::RefreshSurfaceIfNeeded() {
 #if defined(__ANDROID__)
     if (window.PollAndroidNativeWindow()) {
@@ -104,21 +129,58 @@ bool Swapchain::RefreshSurfaceIfNeeded() {
         // Recreate the surface from the fresh ANativeWindow and force a
         // swapchain recreate on the next Present() / AcquireNextImage().
         LOG_INFO(Render_Vulkan, "Detected ANativeWindow change, recreating vk::SurfaceKHR");
-        // Also refresh the cached window size so the new swapchain matches
-        // the post-orientation geometry (e.g. portrait 1080x2400 -> landscape
-        // 2400x1080). The main-thread SDL event loop may not have processed
-        // the SDL_EVENT_WINDOW_RESIZED yet.
-        window.PollWindowSize();
-        RecreateSurface();
-        if (surface) {
-            // Surface format / present mode may differ on the new surface;
-            // re-query to be safe.
-            FindPresentFormat();
-            FindPresentMode();
-        }
-        needs_recreation = true;
+        return RefreshSurfaceFromNewANativeWindow();
+    }
+    return false;
+#else
+    return false;
+#endif
+}
+
+bool Swapchain::WaitForFreshSurface() {
+#if defined(__ANDROID__)
+    // Try the immediate poll first (covers the common case where SDL has
+    // already delivered the new ANativeWindow before we got here).
+    if (RefreshSurfaceIfNeeded()) {
         return true;
     }
+
+    // We *know* the surface is lost (caller only invokes this from the
+    // AcquireNextImage-failure path). SDL3's `onNativeSurfaceDestroyed`
+    // sets the internal data->native_window to NULL but does NOT update
+    // the SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER property — that only
+    // happens later in `onNativeSurfaceCreated` (which is fired by the
+    // Java side after the new Surface is constructed).
+    //
+    // During an Android orientation transition there is a window of
+    // 100-500ms where the old ANativeWindow is dead but SDL hasn't yet
+    // received the new one. Polling once at that moment returns false;
+    // if we just gave up, the screen would stay black forever (because
+    // Present() may not be called again until the game's main loop
+    // issues its next flip, which on interpreter-backed Android can take
+    // a long time, and may even deadlock on other emulator init steps).
+    //
+    // Solution: poll SDL's property every ~50ms for up to ~1 second. As
+    // soon as SDL receives `surfaceCreated` from Java, the property is
+    // updated and our poll will detect the change.
+    constexpr int kMaxRetries = 20;
+    constexpr auto kRetryDelay = std::chrono::milliseconds(50);
+    LOG_WARNING(Render_Vulkan,
+                "Surface lost; waiting up to {}ms for SDL to deliver new ANativeWindow",
+                kMaxRetries * 50);
+    for (int i = 0; i < kMaxRetries; ++i) {
+        std::this_thread::sleep_for(kRetryDelay);
+        if (RefreshSurfaceIfNeeded()) {
+            LOG_INFO(Render_Vulkan,
+                      "Got fresh ANativeWindow after {} retries ({}ms)",
+                      i + 1, (i + 1) * 50);
+            return true;
+        }
+    }
+    LOG_ERROR(Render_Vulkan,
+              "ANativeWindow did not change after {}ms; giving up this frame "
+              "(will retry on next Present())",
+              kMaxRetries * 50);
     return false;
 #else
     return false;
@@ -381,7 +443,15 @@ void Swapchain::SetSurfaceProperties() {
     // log the error and fall back to the current window dimensions so the
     // swapchain we eventually create matches the user's actual screen
     // geometry once the surface is re-acquired.
+    //
+    // Also poll SDL for a fresh window size — `width`/`height` cached in
+    // WindowSDL may still be the pre-orientation portrait dimensions even
+    // though the orientation transition has already happened at the Android
+    // system level (SDL may not have processed SDL_EVENT_WINDOW_RESIZED
+    // yet, but SDL_GetWindowSizeInPixels reads the live ANativeWindow
+    // geometry).
     if (capabilities_result != vk::Result::eSuccess || !surface) {
+        window.PollWindowSize();
         LOG_ERROR(Render_Vulkan, "Failed to query surface capabilities: {}; using window {}x{}",
                   vk::to_string(capabilities_result), width, height);
         extent = vk::Extent2D{static_cast<u32>(width), static_cast<u32>(height)};

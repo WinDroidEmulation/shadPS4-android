@@ -49,6 +49,21 @@ public:
     /// On non-Android platforms this is a no-op and returns false.
     bool RefreshSurfaceIfNeeded();
 
+    /// Like RefreshSurfaceIfNeeded, but if the immediate poll doesn't
+    /// detect a change, retries with a short sleep for up to ~1 second.
+    ///
+    /// Use this from the AcquireNextImage-failure path in Presenter::Present
+    /// when we *know* the surface is lost (ErrorSurfaceLostKHR was returned)
+    /// but SDL3 may not yet have delivered the new ANativeWindow — on
+    /// Android, surfaceDestroyed fires immediately (the vk::SurfaceKHR is
+    /// dead), but surfaceCreated fires only after the Java side creates the
+    /// new Surface, which can take 100-500ms during an orientation
+    /// transition. Without waiting, we'd skip the frame and the renderer
+    /// would never recover if Present() isn't called again.
+    ///
+    /// On non-Android platforms this is a no-op and returns false.
+    bool WaitForFreshSurface();
+
     vk::SurfaceKHR GetSurface() const {
         return surface;
     }
@@ -131,6 +146,15 @@ private:
     /// On non-Android platforms this is a no-op (the surface is created
     /// once at construction time and never changes).
     void RecreateSurface();
+
+    /// Internal helper: assumes a new ANativeWindow has already been
+    /// detected (window_info.render_surface is the new pointer), refreshes
+    /// the cached window size, recreates the vk::SurfaceKHR, re-queries
+    /// format/present-mode, and marks needs_recreation=true. Returns true
+    /// if a new usable surface was created.
+    ///
+    /// On non-Android this is a no-op and returns false.
+    bool RefreshSurfaceFromNewANativeWindow();
 
 private:
     const Instance& instance;
