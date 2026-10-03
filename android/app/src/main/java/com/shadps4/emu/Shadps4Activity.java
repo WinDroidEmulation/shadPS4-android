@@ -57,6 +57,11 @@ public class Shadps4Activity extends SDLActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Force landscape orientation immediately, before any native code
+        // runs. MIUI/HyperOS sometimes ignores the manifest's
+        // screenOrientation attribute, so we also set it programmatically.
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+
         // Must run before the native libraries are loaded by the SDL startup
         // sequence, otherwise path_util.cpp would fall back to a hard-coded
         // default directory.

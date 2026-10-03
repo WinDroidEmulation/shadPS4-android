@@ -71,8 +71,16 @@ void Swapchain::Create(u32 width_, u32 height_) {
     };
 
     auto [swapchain_result, chain] = instance.GetDevice().createSwapchainKHR(swapchain_info);
+#if defined(__ANDROID__)
+    if (swapchain_result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "Failed to create swapchain: {}",
+                  vk::to_string(swapchain_result));
+        return;
+    }
+#else
     ASSERT_MSG(swapchain_result == vk::Result::eSuccess, "Failed to create swapchain: {}",
                vk::to_string(swapchain_result));
+#endif
     swapchain = chain;
 
     SetupImages();
