@@ -34,6 +34,21 @@ public:
     /// Presents the current image and move to the next one
     bool Present();
 
+    /// On Android, the underlying ANativeWindow can be destroyed and
+    /// replaced by the system during an orientation transition (we declare
+    /// `orientation` in AndroidManifest's configChanges so the Activity is
+    /// NOT recreated, but the surface still is). The vk::SurfaceKHR we
+    /// created at construction time then becomes invalid and every swapchain
+    /// operation returns eErrorSurfaceLostKHR — the screen stays black.
+    ///
+    /// This method polls the window's current native render_surface and, if
+    /// it has changed, destroys the stale vk::SurfaceKHR and creates a fresh
+    /// one from the new ANativeWindow. Returns true if the surface was
+    /// actually refreshed (caller should follow up with Recreate()).
+    ///
+    /// On non-Android platforms this is a no-op and returns false.
+    bool RefreshSurfaceIfNeeded();
+
     vk::SurfaceKHR GetSurface() const {
         return surface;
     }
@@ -111,11 +126,21 @@ private:
     /// Creates the image acquired and present ready semaphores
     void RefreshSemaphores();
 
+    /// (Re)creates the vk::SurfaceKHR from the window's current native
+    /// render_surface. Destroys the previous surface first if any.
+    /// On non-Android platforms this is a no-op (the surface is created
+    /// once at construction time and never changes).
+    void RecreateSurface();
+
 private:
     const Instance& instance;
     const Frontend::WindowSDL& window;
     vk::SwapchainKHR swapchain{};
     vk::SurfaceKHR surface{};
+    // Cached native window handle that was used to create `surface`.
+    // On Android this lets us detect when the system has swapped the
+    // ANativeWindow underneath us during an orientation transition.
+    void* native_window_used = nullptr;
     vk::SurfaceFormatKHR surface_format;
     vk::Format view_format;
     vk::PresentModeKHR present_mode;

@@ -374,6 +374,43 @@ void WindowSDL::OnResize() {
     ImGui::Core::OnResize();
 }
 
+bool WindowSDL::PollAndroidNativeWindow() const {
+#if defined(SDL_PLATFORM_ANDROID)
+    if (window == nullptr) {
+        return false;
+    }
+    void* current = SDL_GetPointerProperty(
+        SDL_GetWindowProperties(window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
+    if (current == nullptr || current == window_info.render_surface) {
+        return false;
+    }
+    LOG_INFO(Frontend,
+             "Android ANativeWindow changed: old={} new={} (orientation transition handled)",
+             window_info.render_surface, current);
+    window_info.render_surface = current;
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool WindowSDL::PollWindowSize() const {
+    if (window == nullptr) {
+        return false;
+    }
+    s32 new_w = width;
+    s32 new_h = height;
+    SDL_GetWindowSizeInPixels(window, &new_w, &new_h);
+    if (new_w == width && new_h == height) {
+        return false;
+    }
+    LOG_INFO(Frontend, "Window pixel size changed via poll: {}x{} -> {}x{}", width, height, new_w,
+             new_h);
+    width = new_w;
+    height = new_h;
+    return true;
+}
+
 Uint32 wheelOffCallback(void* og_event, Uint32 timer_id, Uint32 interval) {
     SDL_Event off_event = *(SDL_Event*)og_event;
     off_event.type = SDL_EVENT_MOUSE_WHEEL_OFF;

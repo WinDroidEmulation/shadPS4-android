@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// Enable Android Vulkan WSI types (vk::AndroidSurfaceCreateInfoKHR) on
+// Android so we can (re)create the vk::SurfaceKHR from a fresh ANativeWindow
+// when the system swaps it during orientation transitions.
+#if defined(__ANDROID__)
+#define VK_USE_PLATFORM_ANDROID_KHR
+#include <android/native_window.h>
+#endif
+
 #include <algorithm>
 #include <limits>
 #include "common/assert.h"
@@ -9,6 +17,7 @@
 #include "imgui/renderer/imgui_core.h"
 #include "sdl_window.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
+#include "video_core/renderer_vulkan/vk_platform.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
 
 namespace Vulkan {
@@ -19,7 +28,12 @@ static constexpr vk::SurfaceFormatKHR SURFACE_FORMAT_HDR = {
 };
 
 Swapchain::Swapchain(const Instance& instance_, const Frontend::WindowSDL& window_)
-    : instance{instance_}, window{window_}, surface{CreateSurface(instance.GetInstance(), window)} {
+    : instance{instance_}, window{window_} {
+    RecreateSurface();
+    if (!surface) {
+        LOG_CRITICAL(Render_Vulkan, "Swapchain constructed without a valid surface; rendering "
+                                    "will be deferred until the surface is acquired.");
+    }
     FindPresentFormat();
     FindPresentMode();
 
@@ -29,7 +43,86 @@ Swapchain::Swapchain(const Instance& instance_, const Frontend::WindowSDL& windo
 
 Swapchain::~Swapchain() {
     Destroy();
-    instance.GetInstance().destroySurfaceKHR(surface);
+    if (surface) {
+        instance.GetInstance().destroySurfaceKHR(surface);
+        surface = nullptr;
+    }
+    native_window_used = nullptr;
+}
+
+void Swapchain::RecreateSurface() {
+#if defined(__ANDROID__)
+    // On Android the ANativeWindow can be swapped underneath us by the
+    // system during an orientation transition. Recreate the vk::SurfaceKHR
+    // from the *current* window_info.render_surface pointer.
+    if (surface) {
+        // Make sure any in-flight work touching the old surface is done
+        // before we tear it down.
+        instance.GetDevice().waitIdle();
+        instance.GetInstance().destroySurfaceKHR(surface);
+        surface = nullptr;
+    }
+    auto new_window = window.GetWindowInfo().render_surface;
+    if (new_window == nullptr) {
+        // Refresh from SDL in case the cached value in WindowSDL is stale.
+        window.PollAndroidNativeWindow();
+        new_window = window.GetWindowInfo().render_surface;
+    }
+    if (new_window == nullptr) {
+        LOG_ERROR(Render_Vulkan, "RecreateSurface: no ANativeWindow available yet");
+        native_window_used = nullptr;
+        return;
+    }
+    const vk::AndroidSurfaceCreateInfoKHR android_ci = {
+        .window = static_cast<ANativeWindow*>(new_window),
+    };
+    const auto result = instance.GetInstance().createAndroidSurfaceKHR(&android_ci, nullptr, &surface);
+    if (result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "Failed to (re)create Android surface: {}",
+                  static_cast<int>(result));
+        surface = nullptr;
+        native_window_used = nullptr;
+        return;
+    }
+    native_window_used = new_window;
+    LOG_INFO(Render_Vulkan, "Android surface recreated from ANativeWindow={}", new_window);
+#else
+    if (surface) {
+        return; // already created at construction time, never changes
+    }
+    surface = CreateSurface(instance.GetInstance(), window);
+    native_window_used = window.GetWindowInfo().render_surface;
+#endif
+}
+
+bool Swapchain::RefreshSurfaceIfNeeded() {
+#if defined(__ANDROID__)
+    if (window.PollAndroidNativeWindow()) {
+        // ANativeWindow was swapped under us. The old vk::SurfaceKHR is now
+        // backed by a destroyed ANativeWindow, so every swapchain operation
+        // against it returns eErrorSurfaceLostKHR — the screen stays black.
+        // Recreate the surface from the fresh ANativeWindow and force a
+        // swapchain recreate on the next Present() / AcquireNextImage().
+        LOG_INFO(Render_Vulkan, "Detected ANativeWindow change, recreating vk::SurfaceKHR");
+        // Also refresh the cached window size so the new swapchain matches
+        // the post-orientation geometry (e.g. portrait 1080x2400 -> landscape
+        // 2400x1080). The main-thread SDL event loop may not have processed
+        // the SDL_EVENT_WINDOW_RESIZED yet.
+        window.PollWindowSize();
+        RecreateSurface();
+        if (surface) {
+            // Surface format / present mode may differ on the new surface;
+            // re-query to be safe.
+            FindPresentFormat();
+            FindPresentMode();
+        }
+        needs_recreation = true;
+        return true;
+    }
+    return false;
+#else
+    return false;
+#endif
 }
 
 void Swapchain::Create(u32 width_, u32 height_) {
@@ -38,6 +131,18 @@ void Swapchain::Create(u32 width_, u32 height_) {
     needs_recreation = false;
 
     Destroy();
+
+#if defined(__ANDROID__)
+    // The vk::SurfaceKHR may not be available yet (e.g. before the first
+    // ANativeWindow is ready, or right after an orientation transition).
+    // Skip swapchain creation; the next RefreshSurfaceIfNeeded() will
+    // recreate the surface and trigger another Recreate() call.
+    if (!surface) {
+        LOG_WARNING(Render_Vulkan,
+                    "Swapchain::Create called without a surface; deferring creation");
+        return;
+    }
+#endif
 
     SetSurfaceProperties();
 
@@ -111,6 +216,12 @@ void Swapchain::SetHDR(bool hdr) {
 }
 
 bool Swapchain::AcquireNextImage() {
+    if (!swapchain) {
+        // No swapchain (e.g. waiting for surface). Force a recreation next
+        // time the presenter gets a chance.
+        needs_recreation = true;
+        return false;
+    }
     vk::Device device = instance.GetDevice();
     vk::Result result =
         device.acquireNextImageKHR(swapchain, std::numeric_limits<u64>::max(),
@@ -136,6 +247,10 @@ bool Swapchain::AcquireNextImage() {
 }
 
 bool Swapchain::Present() {
+    if (!swapchain) {
+        needs_recreation = true;
+        return false;
+    }
     const vk::PresentInfoKHR present_info = {
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &present_ready[image_index],
@@ -158,10 +273,31 @@ bool Swapchain::Present() {
 }
 
 void Swapchain::FindPresentFormat() {
+#if defined(__ANDROID__)
+    if (!surface) {
+        // Pick a safe default until a real surface is available; the next
+        // RefreshSurfaceIfNeeded() will re-query when the surface is back.
+        surface_format.format = vk::Format::eR8G8B8A8Unorm;
+        surface_format.colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+        supports_hdr = false;
+        return;
+    }
+#endif
     const auto [formats_result, formats] =
         instance.GetPhysicalDevice().getSurfaceFormatsKHR(surface);
+#if defined(__ANDROID__)
+    if (formats_result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "Failed to query surface formats: {}; using RGBA8 sRGB default",
+                  vk::to_string(formats_result));
+        surface_format.format = vk::Format::eR8G8B8A8Unorm;
+        surface_format.colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+        supports_hdr = false;
+        return;
+    }
+#else
     ASSERT_MSG(formats_result == vk::Result::eSuccess, "Failed to query surface formats: {}",
                vk::to_string(formats_result));
+#endif
 
     // Check if the device supports HDR formats. Here we care of Rec.2020 PQ only as it is expected
     // game output. Other variants as e.g. linear Rec.2020 will require additional color space
@@ -197,6 +333,14 @@ void Swapchain::FindPresentFormat() {
 }
 
 void Swapchain::FindPresentMode() {
+#if defined(__ANDROID__)
+    if (!surface) {
+        // FIFO is guaranteed by the Vulkan spec; use it as a placeholder
+        // until a real surface is available.
+        present_mode = vk::PresentModeKHR::eFifo;
+        return;
+    }
+#endif
     const auto [modes_result, modes] =
         instance.GetPhysicalDevice().getSurfacePresentModesKHR(surface);
     if (modes_result != vk::Result::eSuccess) {
@@ -234,11 +378,19 @@ void Swapchain::SetSurfaceProperties() {
 #if defined(__ANDROID__)
     // On Android, the surface may be lost during orientation changes or
     // when the activity goes through lifecycle transitions. Don't abort;
-    // log the error and use safe defaults so the emulator can continue.
-    if (capabilities_result != vk::Result::eSuccess) {
-        LOG_ERROR(Render_Vulkan, "Failed to query surface capabilities: {}",
-                  vk::to_string(capabilities_result));
-        extent = vk::Extent2D{1280, 720};
+    // log the error and fall back to the current window dimensions so the
+    // swapchain we eventually create matches the user's actual screen
+    // geometry once the surface is re-acquired.
+    if (capabilities_result != vk::Result::eSuccess || !surface) {
+        LOG_ERROR(Render_Vulkan, "Failed to query surface capabilities: {}; using window {}x{}",
+                  vk::to_string(capabilities_result), width, height);
+        extent = vk::Extent2D{static_cast<u32>(width), static_cast<u32>(height)};
+        if (extent.width == 0 || extent.height == 0) {
+            extent = vk::Extent2D{1280, 720};
+        }
+        image_count = 3;
+        transform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
+        composite_alpha = vk::CompositeAlphaFlagBitsKHR::eInherit;
         return;
     }
 #else

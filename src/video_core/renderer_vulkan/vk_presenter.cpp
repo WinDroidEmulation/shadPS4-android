@@ -851,12 +851,29 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
         }
     };
 
+    // On Android, the underlying ANativeWindow can be swapped underneath
+    // us during an orientation transition (we declare `orientation` in
+    // AndroidManifest configChanges, so the Activity is NOT recreated,
+    // but the surface still is). Detect that here and recreate the
+    // vk::SurfaceKHR from the fresh ANativeWindow BEFORE we touch the
+    // swapchain — otherwise every swapchain op returns
+    // eErrorSurfaceLostKHR and the screen stays black.
+    if (swapchain.RefreshSurfaceIfNeeded()) {
+        // The surface was refreshed; force a swapchain recreate using the
+        // (now up-to-date) window dimensions.
+        swapchain.Recreate(window.GetWidth(), window.GetHeight());
+    }
+
     // Recreate the swapchain if the window was resized.
     if (window.GetWidth() != swapchain.GetWidth() || window.GetHeight() != swapchain.GetHeight()) {
         swapchain.Recreate(window.GetWidth(), window.GetHeight());
     }
 
     if (!swapchain.AcquireNextImage()) {
+        // Surface might have been swapped between the RefreshSurfaceIfNeeded
+        // check above and here. Try one more refresh before giving up on
+        // this frame.
+        swapchain.RefreshSurfaceIfNeeded();
         swapchain.Recreate(window.GetWidth(), window.GetHeight());
         if (!swapchain.AcquireNextImage()) {
             // User resizes the window too fast and GPU can't keep up. Skip this frame.

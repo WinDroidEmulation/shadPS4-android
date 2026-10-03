@@ -72,6 +72,29 @@ public:
         return window_info;
     }
 
+    // Returns the most up-to-date native render_surface pointer currently
+    // published by SDL in the window's property set. On Android this can
+    // change at runtime when the Activity goes through a config-change /
+    // orientation transition (the system destroys the old ANativeWindow
+    // and hands SDL a new one, even though the Activity itself is not
+    // recreated because we declare `orientation` in `configChanges`).
+    // On non-Android platforms this is a no-op and returns false.
+    //
+    // The check is read-only with respect to SDL state and may be called
+    // from any thread; SDL_GetWindowProperties + SDL_GetPointerProperty are
+    // internally synchronized in SDL3. The method is const because it only
+    // refreshes the cached `window_info.render_surface` pointer (which is
+    // mutable for exactly this reason).
+    bool PollAndroidNativeWindow() const;
+
+    // Re-reads the current window pixel size from SDL and updates the
+    // cached `width`/`height` members. Returns true if either dimension
+    // changed. Safe to call from any thread; on Android the size returned
+    // by SDL reflects the latest ANativeWindow geometry. Like
+    // PollAndroidNativeWindow, this is const — it only refreshes cached
+    // state that is allowed to change underneath us.
+    bool PollWindowSize() const;
+
     void SetIcon(std::span<const u8> png_data);
 
     void WaitEvent();
@@ -86,10 +109,15 @@ private:
     void OnGamepadEvent(const SDL_Event* event);
 
 private:
-    s32 width;
-    s32 height;
+    // `width`, `height`, and `window_info` are marked mutable because they
+    // are cached values that get refreshed from SDL at any time (see
+    // PollAndroidNativeWindow / PollWindowSize / OnResize). The refreshers
+    // are const methods callable from any thread, which is the standard
+    // "mutable cached state" idiom.
+    mutable s32 width;
+    mutable s32 height;
     Input::GameControllers controllers{};
-    WindowSystemInfo window_info{};
+    mutable WindowSystemInfo window_info{};
     SDL_Window* window{};
     bool is_shown{};
     bool is_open{true};
