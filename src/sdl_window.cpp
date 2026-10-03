@@ -208,12 +208,21 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, Input::GameControllers* controller
 WindowSDL::~WindowSDL() = default;
 
 void WindowSDL::SetIcon(std::span<const u8> png_data) {
+#if defined(SDL_PLATFORM_ANDROID)
+    // On Android, SDL_SetWindowIcon is a no-op (the OS uses the app icon
+    // declared in AndroidManifest.xml via android:icon="@mipmap/ic_launcher").
+    // Calling it just logs an "That operation is not supported" error.
+    // Skip the whole call to silence the error log.
+    (void)png_data;
+    LOG_DEBUG(Core, "Skipping SDL_SetWindowIcon on Android (uses manifest icon)");
+#else
     if (png_data.empty()) {
         LOG_WARNING(Core, "No window icon data available, using default icon.");
         SetDefaultWindowIcon(window);
         return;
     }
     SetWindowIcon(window, std::vector<u8>(png_data.begin(), png_data.end()));
+#endif
 }
 
 void WindowSDL::WaitEvent() {
@@ -242,7 +251,18 @@ void WindowSDL::WaitEvent() {
         break;
     case SDL_EVENT_WINDOW_MINIMIZED:
     case SDL_EVENT_WINDOW_EXPOSED:
-        is_shown = event.type == SDL_EVENT_WINDOW_EXPOSED;
+    case SDL_EVENT_WINDOW_SHOWN:
+    case SDL_EVENT_WINDOW_HIDDEN:
+        // SDL_EVENT_WINDOW_SHOWN / EXPOSED = app came to foreground.
+        // SDL_EVENT_WINDOW_HIDDEN / MINIMIZED = app went to background.
+        // The render thread's WaitForFreshSurface() polls SDL_GetWindowFlags
+        // directly (which reflects the live state set by SDL3's Android
+        // backend inside onNativeSurfaceDestroyed/Created), but we also
+        // update `is_shown` here so the main loop's view of state stays
+        // consistent. Triggering OnResize() on SHOWN ensures the cached
+        // window size is refreshed when the app returns to foreground.
+        is_shown = (event.type == SDL_EVENT_WINDOW_EXPOSED ||
+                    event.type == SDL_EVENT_WINDOW_SHOWN);
         OnResize();
         break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:

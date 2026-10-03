@@ -13,6 +13,8 @@
 
 #include <algorithm>
 #include <limits>
+#include <SDL3/SDL_video.h>
+
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/emulator_settings.h"
@@ -145,6 +147,29 @@ bool Swapchain::WaitForFreshSurface() {
         return true;
     }
 
+    // If the app is in the background (Activity lost visibility), the
+    // Android framework will NOT call `surfaceCreated` — no new
+    // ANativeWindow will be delivered until the user brings the app back
+    // to the foreground. So polling for 1 second would just waste battery
+    // and stall the render thread. Detect the backgrounded state via
+    // SDL_GetWindowFlags() and bail out immediately.
+    //
+    // We poll SDL_GetWindowFlags (not the cached `is_shown` from the main
+    // thread's event loop) because the SDL event loop may not have
+    // processed SDL_EVENT_WINDOW_HIDDEN yet — but SDL_GetWindowFlags
+    // reflects the live window state set by SDL3's Android backend
+    // inside `onNativeSurfaceDestroyed` (it sets the SDL_WINDOW_HIDDEN
+    // flag) / `onNativeSurfaceCreated` (it clears it).
+    const auto window_flags = SDL_GetWindowFlags(window.GetSDLWindow());
+    const bool is_backgrounded =
+        (window_flags & SDL_WINDOW_HIDDEN) != 0 || (window_flags & SDL_WINDOW_MINIMIZED) != 0;
+    if (is_backgrounded) {
+        LOG_INFO(Render_Vulkan,
+                 "Surface lost but app is backgrounded (SDL_WINDOW_HIDDEN/MINIMIZED set); "
+                 "not waiting — surface will be re-acquired when app returns to foreground");
+        return false;
+    }
+
     // We *know* the surface is lost (caller only invokes this from the
     // AcquireNextImage-failure path). SDL3's `onNativeSurfaceDestroyed`
     // sets the internal data->native_window to NULL but does NOT update
@@ -173,6 +198,11 @@ bool Swapchain::WaitForFreshSurface() {
     //
     // Either signal triggers a `RefreshSurfaceIfNeeded()` which
     // re-creates the vk::SurfaceKHR from the current SDL3 property.
+    //
+    // IMPORTANT: we also poll the backgrounded state inside the loop, so
+    // that if the user backgrounds the app DURING the wait (the wait
+    // starts before SDL gets SDL_EVENT_WINDOW_HIDDEN), we exit early
+    // instead of burning the full 1 second.
     constexpr int kMaxRetries = 40; // 40 × 25ms = 1000ms
     constexpr auto kRetryDelay = std::chrono::milliseconds(25);
     LOG_WARNING(Render_Vulkan,
@@ -181,6 +211,18 @@ bool Swapchain::WaitForFreshSurface() {
     const int initial_java_gen = Frontend::WindowSDL::GetJavaSurfaceGeneration();
     for (int i = 0; i < kMaxRetries; ++i) {
         std::this_thread::sleep_for(kRetryDelay);
+
+        // Re-check backgrounded state every iteration so we can exit
+        // early if the user backgrounds the app mid-wait.
+        const auto flags = SDL_GetWindowFlags(window.GetSDLWindow());
+        if ((flags & SDL_WINDOW_HIDDEN) != 0 || (flags & SDL_WINDOW_MINIMIZED) != 0) {
+            LOG_INFO(Render_Vulkan,
+                     "App backgrounded during surface wait (after {}ms); aborting wait — "
+                     "surface will be re-acquired when app returns to foreground",
+                     (i + 1) * 25);
+            return false;
+        }
+
         // (1) Check Java counter first — it fires BEFORE SDL3's property
         // is updated, so as soon as we see a bump we know a fresh
         // surface is on the way. We then call RefreshSurfaceIfNeeded()
