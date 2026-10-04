@@ -112,6 +112,33 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, Input::GameControllers* controller
     if (!SDL_SetHint(SDL_HINT_APP_NAME, "shadPS4")) {
         UNREACHABLE_MSG("Failed to set SDL window hint: {}", SDL_GetError());
     }
+#if defined(SDL_PLATFORM_ANDROID)
+    // Force the Android Activity to request landscape orientation.
+    //
+    // SDL3's Android backend calls `SDLActivity.setOrientation(w, h, resizable, hint)`
+    // when the SDL_Window is created. The Java side (`SDLActivity.setOrientationBis`
+    // at line 1151) computes the `ActivityInfo.SCREEN_ORIENTATION_*` value:
+    //
+    //   - If `hint` contains "LandscapeLeft" or "LandscapeRight", it picks the
+    //     corresponding landscape constant.
+    //   - If hint is empty AND the window is resizable, it falls back to
+    //     `SCREEN_ORIENTATION_FULL_USER` — which means "user can rotate freely".
+    //     On a phone with auto-rotate OFF (the default on most Chinese ROMs
+    //     like MIUI/HyperOS), FULL_USER defaults to PORTRAIT, which is why the
+    //     emulator launches in portrait even though we asked for 1280x720.
+    //
+    // We set SDL_HINT_ORIENTATIONS to "LandscapeLeft LandscapeRight" before
+    // creating the SDL window so that SDL3's setOrientation() picks
+    // SCREEN_ORIENTATION_USER_LANDSCAPE (= sensor-landscape, but locked to
+    // landscape orientation regardless of auto-rotate setting).
+    //
+    // SDL_SetHint returns true on success; we don't abort on failure because
+    // the orientation also gets forced in Java (Shadps4Activity.onCreate calls
+    // setRequestedOrientation(SCREEN_ORIENTATION_LANDSCAPE)) as a backup.
+    if (!SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight")) {
+        LOG_WARNING(Frontend, "Failed to set SDL_HINT_ORIENTATIONS: {}", SDL_GetError());
+    }
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         UNREACHABLE_MSG("Failed to initialize SDL video subsystem: {}", SDL_GetError());
     }
