@@ -59,6 +59,42 @@ void Swapchain::RecreateSurface() {
     // On Android the ANativeWindow can be swapped underneath us by the
     // system during an orientation transition. Recreate the vk::SurfaceKHR
     // from the *current* window_info.render_surface pointer.
+    //
+    // CRITICAL: destroy the old swapchain BEFORE destroying the surface.
+    // The Vulkan spec requires that any swapchains bound to a surface
+    // must be destroyed before the surface itself is destroyed. If we
+    // destroy the surface while the swapchain is still alive, the Adreno
+    // driver's DestroySwapchainKHR crashes with "Scudo ERROR: corrupted
+    // chunk header" (heap corruption) when it tries to destroy the
+    // swapchain later (in the next Create() → Destroy() cycle).
+    if (swapchain) {
+        instance.GetDevice().waitIdle();
+        instance.GetDevice().destroySwapchainKHR(swapchain);
+        swapchain = nullptr;
+        // Also clear the image views and semaphores that belong to the
+        // destroyed swapchain — they reference the now-dead swapchain.
+        for (auto& iv : images_view) {
+            if (iv) {
+                instance.GetDevice().destroyImageView(iv);
+                iv = nullptr;
+            }
+        }
+        images_view.clear();
+        for (auto& sem : image_acquired) {
+            if (sem) {
+                instance.GetDevice().destroySemaphore(sem);
+                sem = nullptr;
+            }
+        }
+        for (auto& sem : present_ready) {
+            if (sem) {
+                instance.GetDevice().destroySemaphore(sem);
+                sem = nullptr;
+            }
+        }
+        image_acquired.clear();
+        present_ready.clear();
+    }
     if (surface) {
         // Make sure any in-flight work touching the old surface is done
         // before we tear it down.
@@ -649,19 +685,29 @@ void Swapchain::Destroy() {
     }
 
     for (auto& image_view : images_view) {
-        device.destroyImageView(image_view);
+        if (image_view) {
+            device.destroyImageView(image_view);
+            image_view = nullptr;
+        }
     }
     images_view.clear();
 
     if (swapchain) {
         device.destroySwapchainKHR(swapchain);
+        swapchain = nullptr;
     }
 
-    for (const auto& sem : image_acquired) {
-        device.destroySemaphore(sem);
+    for (auto& sem : image_acquired) {
+        if (sem) {
+            device.destroySemaphore(sem);
+            sem = nullptr;
+        }
     }
-    for (const auto& sem : present_ready) {
-        device.destroySemaphore(sem);
+    for (auto& sem : present_ready) {
+        if (sem) {
+            device.destroySemaphore(sem);
+            sem = nullptr;
+        }
     }
 
     image_acquired.clear();
