@@ -430,38 +430,34 @@ void Launch(char* executableName, bool sameProcess) {
     ImGui::DestroyContext();
     SDL_DestroyRenderer(renderer);
     renderer = nullptr;
-    SDL_DestroyWindow(window);
-    // On Android, SDL_Quit() also tears down the Android surface lifecycle
-    // (Android_Window goes NULL, the JNI hooks are detached, etc.). The
-    // emulator's Emulator::Run path that immediately follows (when
-    // `sameProcess == true`, which is forced on Android by main.cpp)
-    // then calls `SDL_Init(SDL_INIT_VIDEO)` again to create a new
-    // WindowSDL — but on Android, SDL3 only supports ONE window per
-    // Activity, and re-initializing SDL after a SDL_Quit on the same
-    // Activity leaves the Activity in a half-torn-down state. The
-    // WindowManager keeps the Activity's TaskInfo flagged with
-    // SDL_WINDOW_MINIMIZED (set when Big Picture's window went
-    // background), and the surface-lost storm never clears — the
-    // emulator renders to a permanently-minimized window.
+    // On Android, SDL3 only supports one window per Activity. The Big
+    // Picture window was created when the app launched, and we want to
+    // hand it over to the emulator (Emulator::Run → WindowSDL) so the
+    // emulator can render to the same SDL_Window without going through
+    // SDL_DestroyWindow + SDL_CreateWindow — that cycle on Android triggers
+    // `surfaceDestroyed`, which causes the Activity's Task to be flagged
+    // as MINIMIZED. Once MINIMIZED is set, the renderer keeps seeing
+    // SDL_WINDOW_MINIMIZED and bails out of every frame (the v6
+    // "Surface lost but app is backgrounded" guard), so the screen stays
+    // black forever.
     //
-    // Fix: skip the SDL_Quit() on Android. The existing SDL init is
-    // preserved, so when Emulator::Run creates a new WindowSDL the
-    // SDL_Init(SDL_INIT_VIDEO) call inside is a no-op (already
-    // initialized) and the new window is created on the same Activity
-    // without the Android surface lifecycle being torn down.
+    // Fix: on Android, set the global `g_reuse_sdl_window_on_android`
+    // (declared in sdl_window.h) to the Big Picture window pointer, and
+    // skip SDL_DestroyWindow + SDL_Quit. WindowSDL's ctor reads the
+    // global, adopts the window, and clears the global.
     //
-    // Desktop (Windows/Linux/macOS) doesn't have this issue — SDL
-    // supports multiple windows there and the OS doesn't tie window
-    // lifecycle to a single Activity — so SDL_Quit() is fine.
-#if !defined(__ANDROID__)
-    SDL_Quit();
+    // On desktop (Windows/Linux/macOS) SDL supports multiple windows, so
+    // we still call SDL_DestroyWindow + SDL_Quit there.
+#if defined(__ANDROID__)
+    // Hand the Big Picture window to the emulator via the global
+    // declared in sdl_window.h. WindowSDL's ctor reads this global and
+    // adopts the window instead of destroying/recreating it.
+    Frontend::g_reuse_sdl_window_on_android = window;
+    LOG_INFO(ImGui, "Handing off SDL_Window {} to emulator (skipping SDL_DestroyWindow/Quit on Android)",
+             (void*)window);
 #else
-    // Keep SDL alive on Android. Note: SDL_DestroyWindow above already
-    // clears the global Android_Window pointer in SDL3's Android backend
-    // (Android_DestroyWindow sets it to NULL), so the next SDL_CreateWindow
-    // call will succeed.
-    LOG_INFO(ImGui, "Skipping SDL_Quit() on Android — keeping SDL initialized "
-                    "for emulator window reuse");
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 #endif
 
     EmulatorSettings.SetBigPictureScale(static_cast<int>(uiScale * 1000));

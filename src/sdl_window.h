@@ -28,6 +28,29 @@ enum class WindowSystemType : u8 {
     Metal,
 };
 
+// On Android, only one SDL_Window can exist per Activity (SDL3 limitation).
+// Big Picture UI creates a window when the app starts; when the user picks
+// a game and clicks Launch, Big Picture would normally destroy that window
+// and `Emulator::Run` would create a new one for the emulator. But
+// destroying an SDL window on Android triggers `surfaceDestroyed` and
+// causes the Activity to lose its ANativeWindow — Android then marks the
+// Task as MINIMIZED, and the emulator window never recovers (MIUI is
+// particularly aggressive about taking the launcher to foreground when
+// the Activity briefly loses its surface).
+//
+// To avoid this transition entirely, Big Picture can hand its existing
+// SDL_Window pointer to WindowSDL via this global. WindowSDL's ctor
+// checks the global: if non-null, it adopts the existing window (calls
+// SDL_DestroyRenderer on it if any, sets the VULKAN flag, and skips
+// SDL_CreateWindow). If null, WindowSDL creates a new window as usual.
+//
+// Only used on Android. On desktop platforms this stays NULL and the
+// existing create-new-window path is taken (multi-window SDL is fine
+// there).
+//
+// Defined in sdl_window.cpp.
+extern SDL_Window* g_reuse_sdl_window_on_android;
+
 struct WindowSystemInfo {
     // Connection to a display server. This is used on X11 and Wayland platforms.
     void* display_connection = nullptr;

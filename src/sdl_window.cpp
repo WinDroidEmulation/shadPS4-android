@@ -46,6 +46,12 @@ CMRC_DECLARE(res);
 
 namespace Frontend {
 
+// See src/sdl_window.h for documentation. Big Picture sets this on Android
+// before calling `emulator->Run(...)` so that WindowSDL reuses the existing
+// SDL_Window instead of destroying/recreating it (which on Android would
+// trigger `surfaceDestroyed` and permanently MINIMIZED the Activity).
+SDL_Window* g_reuse_sdl_window_on_android = nullptr;
+
 #if defined(SDL_PLATFORM_ANDROID)
 // JNI helper for WindowSDL::GetJavaSurfaceGeneration is inlined into the
 // method body. We keep SDL3's SDL_system.h and <jni.h> included at the
@@ -151,6 +157,81 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, Input::GameControllers* controller
 #endif
     SDL_InitSubSystem(SDL_INIT_AUDIO);
 
+#if defined(SDL_PLATFORM_ANDROID)
+    // Reuse-path: if Big Picture handed us its SDL_Window (see
+    // g_reuse_sdl_window_on_android in sdl_window.h), adopt it instead of
+    // creating a new one. This avoids the surfaceDestroyed → Activity goes
+    // MINIMIZED storm that happens on Android when SDL_DestroyWindow is
+    // called and a new SDL_CreateWindow follows immediately.
+    if (g_reuse_sdl_window_on_android != nullptr) {
+        window = g_reuse_sdl_window_on_android;
+        g_reuse_sdl_window_on_android = nullptr; // one-shot, only used once
+
+        // The Big Picture window was created with SDL_WINDOW_FULLSCREEN
+        // (and possibly other flags). The Vulkan renderer needs the
+        // SDL_WINDOW_VULKAN flag — SDL3 lets us set it via SDL_SetWindowFlag
+        // (SDL3 actually doesn't have a public SetWindowFlag for VULKAN, but
+        // since the window was already created with a Vulkan-capable surface
+        // on Android — ANativeWindow — the Vulkan renderer doesn't need
+        // SDL_WINDOW_VULKAN to be set, it just needs the window's
+        // SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER which we read below).
+        //
+        // Just refresh the cached width/height from the live window so the
+        // first swapchain matches the actual ANativeWindow geometry.
+        SDL_GetWindowSizeInPixels(window, &width, &height);
+        LOG_INFO(Frontend,
+                 "WindowSDL: reusing existing SDL_Window {} ({}x{}) from Big Picture",
+                 (void*)window, width, height);
+    } else {
+        // No existing window — create a new one.
+        // Note: SDL3 on Android only supports ONE window per Activity, so
+        // if there's already a window this call will fail. We checked
+        // g_reuse_sdl_window_on_android first to take the reuse path, so
+        // if we get here, no window should exist.
+        SDL_PropertiesID props = SDL_CreateProperties();
+        SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING,
+                              std::string(window_title).c_str());
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, SDL_WINDOWPOS_CENTERED);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, SDL_WINDOWPOS_CENTERED);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, width);
+        SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, height);
+        SDL_SetNumberProperty(props, "flags", SDL_WINDOW_VULKAN);
+        SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
+        // Creating the window directly in fullscreen avoids a visible windowed -> fullscreen
+        // transition on startup. SDL sizes the window to the display and keeps the requested
+        // width/height as the windowed size to restore when leaving fullscreen.
+        SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN,
+                               EmulatorSettings.IsFullScreen());
+        window = SDL_CreateWindowWithProperties(props);
+        SDL_DestroyProperties(props);
+        if (window == nullptr) {
+            UNREACHABLE_MSG("Failed to create window handle: {}", SDL_GetError());
+        }
+
+        SDL_SetWindowMinimumSize(window, 640, 360);
+
+        bool error = false;
+        const SDL_DisplayID displayIndex = SDL_GetDisplayForWindow(window);
+        if (displayIndex == 0) {
+            LOG_ERROR(Frontend, "Error getting display index: {}", SDL_GetError());
+            error = true;
+        }
+        const SDL_DisplayMode* displayMode;
+        if ((displayMode = SDL_GetCurrentDisplayMode(displayIndex)) == 0) {
+            LOG_ERROR(Frontend, "Error getting display mode: {}", SDL_GetError());
+            error = true;
+        }
+        if (!error) {
+            SDL_SetWindowFullscreenMode(
+                window, EmulatorSettings.GetFullScreenMode() == "Fullscreen" ? displayMode : NULL);
+        }
+        SDL_SetWindowFullscreen(window, EmulatorSettings.IsFullScreen());
+        SDL_SyncWindow(window);
+        // The window geometry is only final once the fullscreen transition has settled; refresh
+        // the cached size so the first swapchain and the splashscreen use the real drawable size.
+        SDL_GetWindowSizeInPixels(window, &width, &height);
+    }
+#else  // non-Android
     SDL_PropertiesID props = SDL_CreateProperties();
     SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING,
                           std::string(window_title).c_str());
@@ -193,6 +274,7 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, Input::GameControllers* controller
     // The window geometry is only final once the fullscreen transition has settled; refresh
     // the cached size so the first swapchain and the splashscreen use the real drawable size.
     SDL_GetWindowSizeInPixels(window, &width, &height);
+#endif
 
     SDL_InitSubSystem(SDL_INIT_GAMEPAD);
 
