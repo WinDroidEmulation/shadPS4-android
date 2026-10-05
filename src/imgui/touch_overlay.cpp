@@ -35,6 +35,7 @@
 // and imgui_impl_sdlrenderer3.h). Re-use them rather than pulling upstream's.
 #include "imgui/big_picture/imgui_impl_sdl3_big_picture.h"
 #include "imgui/big_picture/imgui_impl_sdlrenderer3.h"
+#include "imgui/imgui_layer.h"
 
 namespace TouchOverlay {
 
@@ -335,8 +336,55 @@ void DrawCompatMessage(float w, float h, const std::string& game_title) {
 
 } // namespace
 
+// ImGui Layer subclass that calls TouchOverlay::Draw every frame. We register
+// this with ImGui::Core via TouchOverlay::Init() on Android, so the virtual
+// buttons are drawn on top of the running game's Vulkan-rendered output.
+//
+// On non-Android platforms, Init() is a no-op (see the #if below), so the
+// layer registration never happens and the touch overlay stays disabled.
+#if defined(__ANDROID__)
+namespace {
+class TouchOverlayLayer : public ImGui::Layer {
+public:
+    void Draw() override {
+        // The renderer's ImGui::Core calls us once per frame between
+        // ImGui::NewFrame() and ImGui::Render(). We don't have direct
+        // access to the SDL_Window's pixel dimensions from here, but
+        // ImGui::GetMainViewport()->Size gives us the same information
+        // (it's set by ImGui_ImplVulkan_NewFrame from the surface extent).
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        if (vp == nullptr || vp->Size.x <= 0.0f || vp->Size.y <= 0.0f) {
+            return;
+        }
+        TouchOverlay::Draw(vp->Size.x, vp->Size.y);
+    }
+};
+
+TouchOverlayLayer g_touch_overlay_layer;
+bool g_layer_registered = false;
+} // namespace
+#endif
+
 void Init() {
-    // Nothing persistent to do — controllers are pulled via the singleton.
+#if defined(__ANDROID__)
+    // Register the touch overlay as an ImGui layer so it gets drawn on
+    // every frame by the renderer's ImGui::Core::Render() loop. This is
+    // what makes the virtual D-pad / face / shoulder buttons visible
+    // on top of the game's video output on touch-only devices.
+    //
+    // Idempotent — only registers once even if Init is called multiple
+    // times (e.g. by Emulator::Run after the Big Picture UI already
+    // initialized ImGui).
+    if (!g_layer_registered) {
+        ImGui::Layer::AddLayer(&g_touch_overlay_layer);
+        g_layer_registered = true;
+        LOG_INFO(ImGui, "Touch overlay layer registered (virtual gamepad on Android)");
+    }
+#else
+    // Touch overlay is Android-only — on desktop platforms the user has
+    // a real gamepad / keyboard, no need for the overlay.
+    (void)0;
+#endif
 }
 
 void SetVisible(bool visible) {

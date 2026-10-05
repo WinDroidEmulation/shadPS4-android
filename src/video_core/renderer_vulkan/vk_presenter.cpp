@@ -16,6 +16,7 @@
 #include "imgui/renderer/imgui_core.h"
 #include "imgui/renderer/imgui_impl_vulkan.h"
 #include "imgui/shadnet_notifications_layer.h"
+#include "imgui/touch_overlay.h"
 #include "sdl_window.h"
 #include "video_core/buffer_cache/buffer.h"
 #include "video_core/renderdoc.h"
@@ -496,6 +497,11 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
     ImGui::Friends::Register();
     ImGui::ShadNetNotify::Register();
     ImGui::InvitationPrompt::Register();
+    // Register the on-screen touch overlay (virtual D-pad + face buttons)
+    // as an ImGui layer. On Android this makes the overlay visible on top
+    // of the running game's video output. On non-Android platforms, the
+    // Init() call is a no-op.
+    TouchOverlay::Init();
 }
 
 Presenter::~Presenter() {
