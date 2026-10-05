@@ -430,34 +430,33 @@ void Launch(char* executableName, bool sameProcess) {
     ImGui::DestroyContext();
     SDL_DestroyRenderer(renderer);
     renderer = nullptr;
-    // On Android, SDL3 only supports one window per Activity. The Big
-    // Picture window was created when the app launched, and we want to
-    // hand it over to the emulator (Emulator::Run → WindowSDL) so the
-    // emulator can render to the same SDL_Window without going through
-    // SDL_DestroyWindow + SDL_CreateWindow — that cycle on Android triggers
-    // `surfaceDestroyed`, which causes the Activity's Task to be flagged
-    // as MINIMIZED. Once MINIMIZED is set, the renderer keeps seeing
-    // SDL_WINDOW_MINIMIZED and bails out of every frame (the v6
-    // "Surface lost but app is backgrounded" guard), so the screen stays
-    // black forever.
+    // On Android, SDL3 only supports one window per Activity. Big Picture's
+    // SDL_DestroyWindow (below) calls SDL3's Android backend's
+    // Android_DestroyWindow, which destroys the EGL surface bound to the
+    // ANativeWindow via `SDL_EGL_DestroySurface(_this, data->egl_surface)`.
+    // This is necessary because if we DON'T destroy the EGL surface, the
+    // Adreno Vulkan driver rejects `vkCreateAndroidSurfaceKHR` with
+    // VK_ERROR_NATIVE_WINDOW_IN_USE_KHR (-1000000001) when the emulator
+    // tries to create its own Vulkan surface on the same ANativeWindow.
     //
-    // Fix: on Android, set the global `g_reuse_sdl_window_on_android`
-    // (declared in sdl_window.h) to the Big Picture window pointer, and
-    // skip SDL_DestroyWindow + SDL_Quit. WindowSDL's ctor reads the
-    // global, adopts the window, and clears the global.
+    // We do NOT call SDL_Quit() on Android — that would tear down the
+    // entire SDL3 video subsystem including the Java-side hooks attached
+    // to the Activity. Emulator::Run then calls SDL_Init(SDL_INIT_VIDEO)
+    // which is a no-op (already initialized), and creates a new SDL_Window
+    // on the same Activity. The new window's Android_CreateWindow path
+    // fetches a fresh ANativeWindow via Android_JNI_GetNativeWindow()
+    // (the underlying Android Surface is still alive — Java side still
+    // holds it).
     //
     // On desktop (Windows/Linux/macOS) SDL supports multiple windows, so
-    // we still call SDL_DestroyWindow + SDL_Quit there.
-#if defined(__ANDROID__)
-    // Hand the Big Picture window to the emulator via the global
-    // declared in sdl_window.h. WindowSDL's ctor reads this global and
-    // adopts the window instead of destroying/recreating it.
-    Frontend::g_reuse_sdl_window_on_android = window;
-    LOG_INFO(ImGui, "Handing off SDL_Window {} to emulator (skipping SDL_DestroyWindow/Quit on Android)",
-             (void*)window);
-#else
+    // SDL_Quit() is fine — Emulator::Run will re-init SDL from scratch.
+#if !defined(__ANDROID__)
     SDL_DestroyWindow(window);
     SDL_Quit();
+#else
+    SDL_DestroyWindow(window);
+    LOG_INFO(ImGui, "Destroyed Big Picture SDL_Window on Android; "
+                    "skipping SDL_Quit so emulator can reuse the SDL Activity");
 #endif
 
     EmulatorSettings.SetBigPictureScale(static_cast<int>(uiScale * 1000));

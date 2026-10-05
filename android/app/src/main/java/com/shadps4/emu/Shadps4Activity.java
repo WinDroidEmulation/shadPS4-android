@@ -104,6 +104,16 @@ public class Shadps4Activity extends SDLActivity {
         // screenOrientation attribute, so we also set it programmatically.
         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
+        // Keep the screen on while the emulator is running. Android will
+        // auto-pause the Activity (firing onPause → SDL_EVENT_WINDOW_MINIMIZED)
+        // if the screen dims and then locks. Without FLAG_KEEP_SCREEN_ON,
+        // some MIUI/HyperOS versions aggressively push backgrounded games
+        // to the home launcher — the emulator then sees the surface-lost
+        // storm and bails out of every frame, causing the "black screen
+        // forever" bug. Keeping the screen on ensures the Activity stays
+        // resumed as long as the user is in the emulator.
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         // Must run before the native libraries are loaded by the SDL startup
         // sequence, otherwise path_util.cpp would fall back to a hard-coded
         // default directory.
