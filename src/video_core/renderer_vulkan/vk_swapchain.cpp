@@ -424,9 +424,30 @@ bool Swapchain::Present() {
     auto result = instance.GetPresentQueue().presentKHR(present_info);
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
         needs_recreation = true;
+    } else if (result == vk::Result::eErrorSurfaceLostKHR ||
+               result == vk::Result::eErrorUnknown) {
+        // On Android, surface-lost is a common occurrence during orientation
+        // transitions and Activity lifecycle changes. Don't abort — just mark
+        // the swapchain as needing recreation. The next Present() call will
+        // go through RefreshSurfaceIfNeeded() → WaitForFreshSurface() and
+        // recreate the surface when Android provides a new ANativeWindow.
+        LOG_WARNING(Render_Vulkan, "Present returned {}; marking swapchain for recreation",
+                    vk::to_string(result));
+        needs_recreation = true;
     } else {
+#if defined(__ANDROID__)
+        // Don't abort() — just log and mark for recreation. Any other error
+        // (eErrorDeviceLost, eErrorFullScreenExclusiveModeLostEXT, etc.)
+        // would normally crash the desktop build, but on Android we want
+        // the renderer to keep running so the user can recover by rotating
+        // the device or restarting the activity.
+        LOG_ERROR(Render_Vulkan, "Swapchain presentation failed: {}",
+                  vk::to_string(result));
+        needs_recreation = true;
+#else
         ASSERT_MSG(result == vk::Result::eSuccess, "Swapchain presentation failed: {}",
                    vk::to_string(result));
+#endif
     }
 
     frame_index = (frame_index + 1) % image_count;
@@ -473,6 +494,20 @@ void Swapchain::FindPresentFormat() {
 
     // If there is a single undefined surface format, the device doesn't care, so we'll just use
     // RGBA sRGB.
+    if (formats.empty()) {
+#if defined(__ANDROID__)
+        // Empty format list — driver bug or transient state during surface
+        // loss. Fall back to the safe default instead of crashing on
+        // formats[0].format below.
+        LOG_WARNING(Render_Vulkan,
+                    "Empty surface format list; using RGBA8 sRGB default");
+        surface_format.format = vk::Format::eR8G8B8A8Unorm;
+        surface_format.colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+        return;
+#else
+        UNREACHABLE_MSG("Surface returned no usable formats!");
+#endif
+    }
     if (formats[0].format == vk::Format::eUndefined) {
         surface_format.format = vk::Format::eR8G8B8A8Unorm;
         surface_format.colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
@@ -491,7 +526,17 @@ void Swapchain::FindPresentFormat() {
         return;
     }
 
+#if defined(__ANDROID__)
+    // No R8G8B8A8Unorm or B8G8R8A8Unorm found. Some Adreno drivers only
+    // expose A2B10G10R10 / R5G6B5 etc. for surfaces. Pick the first
+    // available format and hope for the best, instead of aborting.
+    LOG_WARNING(Render_Vulkan,
+                "No RGBA8/BGRA8 surface format found; falling back to first available: {}",
+                vk::to_string(formats[0].format));
+    surface_format = formats[0];
+#else
     UNREACHABLE_MSG("Unable to find required swapchain format!");
+#endif
 }
 
 void Swapchain::FindPresentMode() {
@@ -630,29 +675,63 @@ void Swapchain::RefreshSemaphores() {
 
     for (vk::Semaphore& semaphore : image_acquired) {
         auto [semaphore_result, sem] = device.createSemaphore({});
+#if defined(__ANDROID__)
+        if (semaphore_result != vk::Result::eSuccess) {
+            LOG_ERROR(Render_Vulkan, "Failed to create image acquired semaphore: {}",
+                      vk::to_string(semaphore_result));
+            semaphore = nullptr;
+            continue;
+        }
+#else
         ASSERT_MSG(semaphore_result == vk::Result::eSuccess,
                    "Failed to create image acquired semaphore: {}",
                    vk::to_string(semaphore_result));
+#endif
         semaphore = sem;
     }
     for (vk::Semaphore& semaphore : present_ready) {
         auto [semaphore_result, sem] = device.createSemaphore({});
+#if defined(__ANDROID__)
+        if (semaphore_result != vk::Result::eSuccess) {
+            LOG_ERROR(Render_Vulkan, "Failed to create present ready semaphore: {}",
+                      vk::to_string(semaphore_result));
+            semaphore = nullptr;
+            continue;
+        }
+#else
         ASSERT_MSG(semaphore_result == vk::Result::eSuccess,
                    "Failed to create present ready semaphore: {}", vk::to_string(semaphore_result));
+#endif
         semaphore = sem;
     }
 
     for (u32 i = 0; i < image_count; ++i) {
-        SetObjectName(device, image_acquired[i], "Swapchain Semaphore: image_acquired {}", i);
-        SetObjectName(device, present_ready[i], "Swapchain Semaphore: present_ready {}", i);
+        if (image_acquired[i]) {
+            SetObjectName(device, image_acquired[i], "Swapchain Semaphore: image_acquired {}", i);
+        }
+        if (present_ready[i]) {
+            SetObjectName(device, present_ready[i], "Swapchain Semaphore: present_ready {}", i);
+        }
     }
 }
 
 void Swapchain::SetupImages() {
     vk::Device device = instance.GetDevice();
     auto [images_result, imgs] = device.getSwapchainImagesKHR(swapchain);
+#if defined(__ANDROID__)
+    if (images_result != vk::Result::eSuccess) {
+        LOG_ERROR(Render_Vulkan, "Failed to get swapchain images: {}; marking for recreation",
+                  vk::to_string(images_result));
+        images.clear();
+        images_view.clear();
+        image_count = 0;
+        needs_recreation = true;
+        return;
+    }
+#else
     ASSERT_MSG(images_result == vk::Result::eSuccess, "Failed to create swapchain images: {}",
                vk::to_string(images_result));
+#endif
     images = std::move(imgs);
     image_count = static_cast<u32>(images.size());
     images_view.resize(image_count);
@@ -671,14 +750,27 @@ void Swapchain::SetupImages() {
                     .layerCount = 1,
                 },
         });
+#if defined(__ANDROID__)
+        if (im_view_result != vk::Result::eSuccess) {
+            LOG_ERROR(Render_Vulkan, "Failed to create image view {}: {}",
+                      i, vk::to_string(im_view_result));
+            images_view[i] = nullptr;
+            continue;
+        }
+#else
         ASSERT_MSG(im_view_result == vk::Result::eSuccess, "Failed to create image view: {}",
                    vk::to_string(im_view_result));
+#endif
         images_view[i] = im_view;
     }
 
     for (u32 i = 0; i < image_count; ++i) {
-        SetObjectName(device, images[i], "Swapchain Image {}", i);
-        SetObjectName(device, images_view[i], "Swapchain ImageView {}", i);
+        if (images[i]) {
+            SetObjectName(device, images[i], "Swapchain Image {}", i);
+        }
+        if (images_view[i]) {
+            SetObjectName(device, images_view[i], "Swapchain ImageView {}", i);
+        }
     }
 }
 

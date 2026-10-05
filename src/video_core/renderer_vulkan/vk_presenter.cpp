@@ -613,8 +613,18 @@ Frame* Presenter::PrepareLastFrame() {
         if (result == vk::Result::eTimeout) {
             continue;
         }
+#if defined(__ANDROID__)
+        // On Android, device-lost can happen during surface lifecycle storms.
+        // Don't abort — log and break the loop so PrepareLastFrame() returns
+        // a stale-but-usable frame pointer; the next Present() will detect
+        // the device-lost state via swapchain operations and recreate.
+        LOG_ERROR(Render_Vulkan, "Device lost during waitForFences in PrepareLastFrame: {}",
+                  vk::to_string(result));
+        break;
+#else
         ASSERT_MSG(result != vk::Result::eErrorDeviceLost,
                    "Device lost during waiting for a frame");
+#endif
     }
 
     auto& scheduler = flip_scheduler;
@@ -904,8 +914,20 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
     // skip frame because of slow swapchain recreation. If a frame skip occurs, we skip signal
     // the frame's present fence and future GetRenderFrame() call will hang waiting for this frame.
     const auto reset_result = instance.GetDevice().resetFences(frame->present_done);
+#if defined(__ANDROID__)
+    if (reset_result != vk::Result::eSuccess) {
+        // Don't abort — the device may be lost during a surface-lost storm.
+        // Free the frame and skip rendering this frame; the next Present()
+        // will retry.
+        LOG_ERROR(Render_Vulkan, "Unexpected error resetting present done fence: {}",
+                  vk::to_string(reset_result));
+        free_frame();
+        return;
+    }
+#else
     ASSERT_MSG(reset_result == vk::Result::eSuccess,
                "Unexpected error resetting present done fence: {}", vk::to_string(reset_result));
+#endif
 
     ImGuiID dockId = ImGui::Core::NewFrame(is_reusing_frame);
 
@@ -1143,8 +1165,19 @@ Frame* Presenter::GetRenderFrame() {
 
     // Wait for the presentation to be finished so all frame resources are free
     while (wait() != vk::Result::eSuccess) {
+#if defined(__ANDROID__)
+        // Don't abort on device-lost — return the frame anyway. The renderer
+        // will detect the lost device when it tries to record commands and
+        // fall through to the surface-recreation path.
+        if (result == vk::Result::eErrorDeviceLost) {
+            LOG_ERROR(Render_Vulkan, "Device lost during GetRenderFrame waitForFences; "
+                      "returning frame anyway, will recreate on next Present()");
+            break;
+        }
+#else
         ASSERT_MSG(result != vk::Result::eErrorDeviceLost,
                    "Device lost during waiting for a frame");
+#endif
         // Retry if the waiting times out
         if (result == vk::Result::eTimeout) {
             continue;
